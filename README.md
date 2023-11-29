@@ -10,7 +10,7 @@ You can install the latest development version of `zinck` from GitHub:
 ```r
 # Install the development version from GitHub
 if (!require("devtools")) install.packages("devtools")
-devtools::install_github("ghoshstats/zinck")
+devtools::install_github("ghoshstats/zinck",build_vignettes = TRUE)
 ```
 ## Usage
 
@@ -27,9 +27,6 @@ To get started with zinck, explore the package vignettes and documentation:
 ```r
 # View available vignettes
 browseVignettes(package = "zinck")
-
-# Open a specific vignette
-vignette("intro", package = "zinck")
 
 # View package documentation
 ?zinck
