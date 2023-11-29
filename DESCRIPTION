@@ -1,0 +1,50 @@
+Package: zinck
+Title: Zero-Inflated Compositional Knockoff Filter
+Version: 0.0.0.9000
+Authors@R: 
+    c(person(given = "Soham",
+           family = "Ghosh",
+           role = c("aut", "cre"),
+           email = "sghosh39@wisc.edu"),
+    person(given = "Zhengzheng",
+           family = "Tang",
+           role = "ctb",
+           email="ztang2@wisc.edu"),
+    person(given = "Guanhua",
+           family = "Chen",
+           role = "ctb",
+           email= "gchen25@wisc.edu"))
+Description: 
+    Zinck exploits a zero-inflated variant of the Latent Dirichlet Allocation (LDA) model 
+    to generate valid knockoffs that capture the key characteristics of microbiome data - 
+    mainly its compositional nature and high sparsity. It exhibits the properties of 
+    simultaneous variable selection and FDR control to identify microbial biomarkers. 
+    This package provides an implementation of zinck, which is trained either using the 
+    Automatic Differentiation Variational Inference (ADVI) algorithm or using a collapsed 
+    Gibbs sampler, facilitating variable selection for both continuous as well as binary outcomes.
+License: MIT
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3
+Imports:
+    dplyr,
+    reshape2,
+    knockoff,
+    glmnet,
+    randomForest,
+    caret,
+    rstan (== 2.21.8),
+    stats,
+    fitdistrplus,
+    ggplot2,
+    MLmetrics,
+    phyloseq,
+    GUniFrac,
+    kosel,
+    gridExtra,
+    zinLDA
+Suggests:
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+LazyData: true
