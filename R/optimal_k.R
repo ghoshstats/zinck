@@ -1,12 +1,12 @@
 #' @title Optimal Number of Clusters based on Jensen-Shannon Divergence
 #' @description This function identifies the optimal number of clusters for fitting a zinck model
 #' using Jensen-Shannon Divergence. The function fits the model for various values of clusters and calculates
-#' the average Jensen-Shannon Divergence for each, returning the number of clusters that minimizes this value.
+#' the average Jensen-Shannon Divergence for each, returning the number of clusters that maximizes this value.
 #' @param X A OTU matrix with dimensions \eqn{D \times p}.
 #' @param kmin Numeric; the minimum number of clusters to be considered.
 #' @param kmax Numeric; the maximum number of clusters to be considered.
 #' @param seed_list List of numeric values; seeds for reproducibility for each k value, default is NULL.
-#' @return The optimal number of clusters, K, that minimizes the average Jensen-Shannon Divergence.
+#' @return The optimal number of clusters, K, that maximizes the average Jensen-Shannon Divergence.
 #' @examples
 #' \dontrun{
 #' data("combo")
@@ -121,9 +121,33 @@ optimal_k <- function(X, kmin, kmax, seed_list = NULL)
       }
     }
   "
-    stan.model = stan_model(model_code = zinck_code)
-    set.seed(seed_list[[i]])
-    fit_zinck <- suppressWarnings(vb(stan.model, data=zinck_stan_data, algorithm="meanfield", importance_resampling=TRUE, iter=10000,tol_rel_obj=0.01,elbo_samples=500))
+    # set.seed(seed_list[[i]])
+    # fit_zinck <- suppressWarnings(vb(stan.model, data=zinck_stan_data, algorithm="meanfield", importance_resampling=TRUE, verbose=FALSE, iter=10000,tol_rel_obj=0.01,elbo_samples=500))
+    suppressWarnings(
+      suppressMessages({
+        sink(tempfile())  # Redirect output to a temporary file
+        on.exit(sink())  # Ensure output redirection is reset when done
+
+        stan.model <- stan_model(model_code = zinck_code, verbose = FALSE)
+
+        # Ensure seed is set if provided, otherwise, let Stan handle it
+        if (!is.null(seed_list)) {
+          set.seed(seed_list[[i]])
+        }
+
+        fit_zinck <- vb(
+          stan.model,
+          data = zinck_stan_data,
+          algorithm = "meanfield",
+          importance_resampling = TRUE,
+          iter = 10000,
+          tol_rel_obj = 0.01,
+          elbo_samples = 500
+        )
+      })
+    )
+
+
 
     # Extract cluster-term distributions
     beta <- fit_zinck@sim[["est"]][["beta"]]
@@ -145,7 +169,7 @@ optimal_k <- function(X, kmin, kmax, seed_list = NULL)
 
   data <- data.frame(K_values, js_values)
 
-  ggplot(data, aes(x = K_values, y = js_values)) +
+  p <- ggplot(data, aes(x = K_values, y = js_values)) +
     geom_line() +
     geom_point(size = 4) +
     labs(
@@ -159,5 +183,8 @@ optimal_k <- function(X, kmin, kmax, seed_list = NULL)
       panel.grid.major = element_line(size = 0.5, linetype = 'solid', color = "grey"),
       panel.grid.minor = element_line(size = 0.5, linetype = 'solid', color = "grey")
     )
-  return(K_values[which.min(js_values)])
+  print(p)
+  return(K_values[which.max(js_values)])
 }
+
+
