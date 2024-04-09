@@ -16,12 +16,12 @@ optimal_k(X, kmin, kmax, seed_list = NULL)
 \item{seed_list}{List of numeric values; seeds for reproducibility for each k value, default is NULL.}
 }
 \value{
-The optimal number of clusters, K, that minimizes the average Jensen-Shannon Divergence.
+The optimal number of clusters, K, that maximizes the average Jensen-Shannon Divergence.
 }
 \description{
 This function identifies the optimal number of clusters for fitting a zinck model
 using Jensen-Shannon Divergence. The function fits the model for various values of clusters and calculates
-the average Jensen-Shannon Divergence for each, returning the number of clusters that minimizes this value.
+the average Jensen-Shannon Divergence for each, returning the number of clusters that maximizes this value.
 }
 \examples{
 \dontrun{

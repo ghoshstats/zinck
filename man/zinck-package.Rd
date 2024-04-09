@@ -25,7 +25,6 @@ It can properly capture the zero-inflation and complex dependence structure amon
 \describe{
 \item{\code{\link{count.genus}}}{Genus level CRC data.}
 \item{\code{\link{count}}}{Species level CRC data.}
-\item{\code{\link{combo}}}{BMI data.}
 }
 
 For a complete list of functions and datasets, see the \code{INDEX} section.
