@@ -147,8 +147,6 @@ beta <- species_fit$beta
 
 # Generate knockoff features
 X_tilde <- generateKnockoff(X, theta, beta, seed = 1)
-
-# Log-normalize for analysis
 W_tilde <- log_normalize(X_tilde)
 
 # Perform variable selection
