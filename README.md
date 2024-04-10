@@ -101,14 +101,86 @@ library(zinck)
 
 ## Examples and vignettes
 
-To get started with zinck, explore the package vignettes and documentation:
+To get started with zinck, explore the package documentation:
+
+```r
+# View package documentation
+?zinck
+```
+
+## Getting Started
+
+After installation, you can verify and get a feel for the package's capabilities through a practical example. This guide walks you through loading a dataset included with zinck, selecting samples, generating knockoffs, and performing variable selection. This example utilizes the `count.Rdata` dataset included in the zinck package. Ensure it's loaded correctly into your R session.
+
+```r
+# Load the dataset
+data("count", package = "zinck")
+# Ordering the columns by decreasing abundance
+dcount <- count[, order(decreasing = TRUE, colSums(count, na.rm = TRUE), apply(count, 2L, paste, collapse = ''))][, 1:300]
+
+# Random Subject Selection
+set.seed(1)
+sel_index <- rbinom(nrow(dcount), size = 1, prob = 0.5)
+selected_samples <- which(sel_index == 1)
+X <- dcount[selected_samples, ]
+
+# Prepare signals
+Five_all <- c(-3, 3, 2.5, -1, -1.5, 3, 3, -2, -2, -2, 1, -1, 3, -2, -1, -1, 1, 2, -1, -1, 3, 3, -3, -2, -1, -1, 1, -2, 1, 1)
+set.seed(1)
+rand_indices <- sample(1:200, size = 30, replace = FALSE)
+randBeta <- rep(0, 300)
+randBeta[rand_indices] <- sample(Five_all, size = 30, replace = FALSE)
+
+# Generate response
+n = nrow(X)
+W <- log_normalize(X)
+set.seed(1)
+eps = rnorm(n, mean = 0, sd = 1)
+Y <- W %*% randBeta + eps
+
+# Fit the zinck model
+species_fit <- fit.zinck(X, num_clusters = 6, method = "ADVI", seed = 123, alpha_param = 0.1)
+
+# Extract model parameters
+theta <- species_fit$theta
+beta <- species_fit$beta
+
+# Generate knockoff features
+X_tilde <- generateKnockoff(X, theta, beta, seed = 1)
+
+# Log-normalize for analysis
+W_tilde <- log_normalize(X_tilde)
+
+# Perform variable selection
+selected_species <- zinck.filter(W, W_tilde, Y, model = "glmnet", fdr = 0.1, offset = 1)
+
+# Display selected variables
+print(selected_species)
+
+# Evaluating model performance
+TP <- sum(selected_species %in% rand_indices) # True Positives
+FP <- sum(!selected_species %in% rand_indices) # False Positives
+TN <- sum(!neg_index_est %in% rand_indices) # True Negatives
+FN <- length(rand_indices) - TP # False Negatives
+
+estimated_FDR <- FP / (FP + TP)
+estimated_power <- TP / (TP + FN)
+
+print(paste("Estimated FDR:", estimated_FDR))
+print(paste("Estimated Power:", estimated_power))
+```
+Explore the package vignettes for detailed tutorials and examples:
 
 ```r
 # View available vignettes
 browseVignettes(package = "zinck")
-
-# View package documentation
-?zinck
 ```
+
+For any issues or further assistance, consult the zinck pdf manual or visit the GitHub repository's Issues section.
+
+
+
+
+
 
 
