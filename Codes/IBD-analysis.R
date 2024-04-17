@@ -108,4 +108,26 @@ plt.genus <- ggplot(data.genus) +
 
 plt.genus
 
+## Fitting the model-X Knockoff Filter ##
+
+set.seed(12)
+kfp = knockoff.filter(X=X,y=Y,fdr = 0.1,statistic = stat.random_forest,offset = 0) ## MX knockoffs with random forest
+kfp$selected
+
+## Fitting the standard LDA Knockoff Filter ##
+
+df.LDA <- as(as.matrix(X),"dgCMatrix") ## Converting the matrix X into a dgCMatrix
+vanilla.LDA.comb <- LDA(df.LDA,k=20,method="VEM") ## Fitting LDA()
+theta.LDA.comb <- vanilla.LDA.comb@gamma
+beta.LDA.comb <- vanilla.LDA.comb@beta
+beta.LDA.comb <- t(apply(beta.LDA.comb, 1, function(row) row/sum(row))) ## Normalizing the posterior beta estimates
+X_tilde.LDA.comb <- zinck::generateKnockoff(X,theta.LDA.comb,beta.LDA.comb,seed=1) ## Standard LDA Knockoff matrix for X
+
+set.seed(1)
+W <- stat.random_forest(X,X_tilde.LDA.comb,Y)  ## Fitting a Random Forest model
+T <- knockoff.threshold(W,fdr=0.1,offset = 1)
+print(which(W>=T))
+
+
+
 
