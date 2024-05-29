@@ -8,7 +8,8 @@ library(glmnet)
 library(knockoff)
 library(zinck)
 library(kosel)
-
+library(dplyr)
+library(reshape2)
 ############################# Single iteration of our simulation setup ###################################
 
 ####################### Working with CRC species level data ########################
