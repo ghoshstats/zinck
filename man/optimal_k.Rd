@@ -31,5 +31,4 @@ X <- dcount
 result <- optimal_k(X, kmin=8, kmax=11, seed_list=list(1,11,1,1))
 print(result)
 }
-
 }

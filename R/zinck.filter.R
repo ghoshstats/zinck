@@ -43,6 +43,15 @@ zinck.filter <- function(X, X_tilde, Y, model, fdr = 0.1, offset = 1, seed = NUL
     selected_glm = sort(which(W >= T))
     cat('\nSelected variables:\n')
     print(selected_glm)
+      cv_model <- cv.glmnet(X_aug, Y, alpha = 1, family = "binomial")
+    } else { # Continuous response
+      cv_model <- cv.glmnet(X_aug, Y, alpha = 1)
+    }
+
+    best_lambda <- cv_model$lambda.min
+    tuned_glmnet_model <- glmnet(X_aug, Y, alpha = 1, lambda = best_lambda, family = ifelse(is.factor(Y), "binomial", "gaussian"))
+    cf <- as.numeric(coef(tuned_glmnet_model))
+    W <- abs(cf[2:(ncol(X)+1)])-abs(cf[(ncol(X)+2):(ncol(X_aug)+1)])
   } else if (model == "Random Forest") {
     if (tune_mtry) {
       if (is.factor(Y) || length(unique(Y)) == 2) {
@@ -81,6 +90,12 @@ zinck.filter <- function(X, X_tilde, Y, model, fdr = 0.1, offset = 1, seed = NUL
     cat('\nSelected variables:\n')
     print(selected_rf)
   }
+    }
+  }
+  T <- knockoff.threshold(W, fdr = fdr, offset = offset)
+  selected = sort(which(W >= T))
+  cat('\nSelected variables:\n')
+  print(selected)
 }
 
 

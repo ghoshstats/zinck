@@ -10,7 +10,7 @@
 #' @examples
 #' \dontrun{
 #' data("count.genus.RData")
-#' dcount <- count.genus[,order(decreasing=T,colSums(count.genus,na.rm=T), apply(count.genus,2L,paste,collapse=''))]
+#' dcount <- count.genus[,order(decreasing=T,colSums(count.genus,na.rm=T),apply(count.genus,2L,paste,collapse='')]
 #' X <- dcount
 #' result <- optimal_k(X, kmin=8, kmax=11, seed_list=list(1,11,1,1))
 #' print(result)
@@ -32,12 +32,12 @@ optimal_k <- function(X, kmin, kmax, seed_list = NULL)
     if (length(seed_list) != kmax - kmin + 1) stop("Length of seed_list must be equal to the range of k values.")
     if (any(sapply(seed_list, function(x) !is.numeric(x) || x <= 0))) stop("Each seed in seed_list must be a positive numeric value.")
   }
-
-   # Function to calculate Jensen-Shannon Divergence
+  # Function to calculate Jensen-Shannon Divergence
   js_divergence <- function(p, q) {
     m <- 0.5 * (p + q)
     0.5 * (sum(p * log(p / m)) + sum(q * log(q / m)))
   }
+
   # Loop over various values of K
   K_values <- seq(kmin, kmax, by=1 )
   js_values <- numeric(length(K_values))
@@ -122,17 +122,13 @@ optimal_k <- function(X, kmin, kmax, seed_list = NULL)
       }
     }
   "
-    # set.seed(seed_list[[i]])
-    # fit_zinck <- suppressWarnings(vb(stan.model, data=zinck_stan_data, algorithm="meanfield", importance_resampling=TRUE, verbose=FALSE, iter=10000,tol_rel_obj=0.01,elbo_samples=500))
-        #sink(tempfile())  # Redirect output to a temporary file
-        #on.exit(sink())  # Ensure output redirection is reset when done
+ 
+ stan.model <- stan_model(model_code = zinck_code, verbose = FALSE)
 
-        stan.model <- stan_model(model_code = zinck_code, verbose = FALSE)
-
-        # Ensure seed is set if provided, otherwise, let Stan handle it
-        if (!is.null(seed_list)) {
+ # Ensure seed is set if provided, otherwise, let Stan handle it
+ if (!is.null(seed_list)) {
           set.seed(seed_list[[i]])
-        }
+ }
 
         fit_zinck <- vb(
           stan.model,
@@ -143,6 +139,11 @@ optimal_k <- function(X, kmin, kmax, seed_list = NULL)
           tol_rel_obj = 0.01,
           elbo_samples = 500
         )
+      })
+    )
+
+
+
     # Extract cluster-term distributions
     beta <- fit_zinck@sim[["est"]][["beta"]]
 
