@@ -194,12 +194,6 @@ estimated_power <- TP / (TP + FN) # Evaluating the empirical Power or TPR
 print(paste("Estimated FDR:", estimated_FDR))
 print(paste("Estimated Power:", estimated_power))
 ```
-Explore the package vignettes for detailed tutorials and examples:
-
-```r
-# View available vignettes
-browseVignettes(package = "zinck")
-```
 
 For any issues or further assistance, consult the zinck pdf manual or visit the GitHub repository's Issues section.
 
