@@ -10,7 +10,7 @@
 ## System Requirements
 
 Before installing `zinck`, ensure your system meets these requirements:
-- R version 4.0.0 or higher
+- R version 4.0.0 or higher (version 4.1.3 recommended)
 - Rtools (for Windows users)
 - A C++ compiler compatible with R
 
@@ -26,7 +26,7 @@ Before installing `zinck`, ensure your system meets these requirements:
 - `glmnet`
 - `randomForest`
 - `caret`
-- `rstan` (version 2.21.8)
+- `rstan` (version 2.21.7 or 2.21.8 recommended)
 - `StanHeaders` (version 2.26.25)
 - `stats`
 - `fitdistrplus`
