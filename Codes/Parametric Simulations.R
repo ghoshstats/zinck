@@ -81,6 +81,7 @@ zinck_code <- "data {
     }
 "
 
+stan.model <- stan_model(model_code = zinck_code)
 
 mvlognormal<-function(n , Mu, Sigma, R, seed){
   ## Generate Lognormal random variables with zeros. 
@@ -235,14 +236,13 @@ for(i in 1:niter)
     }
     
     zinck_stan_data <- list(
-      K = 8, 
+      K = 8, ## k = 8 (for p = 100), k = 10 (for p = 200), k = 12 (for p = 300) and k = 15 (for p = 400) 
       V = ncol(X),
       D = nrow(X),
       n = X,
       delta = dlt
     )
   
-    stan.model <- stan_model(model_code = zinck_code)
     set.seed(seed_list_DM[i])
     fit_zinck <- vb(
       stan.model,
@@ -318,7 +318,7 @@ for(i in 1:niter)
     }
     
     zinck_stan_data <- list(
-      K = 8,
+      K = 8,      ## k = 8 (for p = 100), k = 10 (for p = 200), k = 11 (for p = 300) and k = 12 (for p = 400) 
       V = ncol(X),
       D = nrow(X),
       n = X,
@@ -406,4 +406,42 @@ print(mean(power3_LN_list))
 print(mean(power4_DM_list)) 
 print(mean(power4_LN_list)) 
 
+########################################### Comparing other methods ########################################################
+############################################################################################################################
 
+## The methods under comparison are MX-KF (Model-X Knockoffs) [Candes et al. (2018)], LDA-KF (vanilla LDA Knockoffs), 
+## DeepLINK [Zhu et al. (2021)], and CKF (Compositional Knockoff Filter) [Srinivasan et al. (2021)].
+
+## You can run the same simulation settings by just replacing the "Fitting the zinck model" chunk using the corresponding code blocks --
+
+######################## Fitting MX-KF ##########################
+
+##### For both DM & LN generation ######
+set.seed(1)
+kfp = knockoff.filter(X=W,y=Y,fdr = FDR,statistic = stat.glmnet_lambdasmax,offset=0) ## Change FDR accordingly!
+kfStat = kfp$statistic
+t = knockoff.threshold(kfStat, fdr = FDR,offset=1)
+kfSelect = sort(which(kfStat >= t))
+index_est = kfSelect
+
+######################## Fitting LDA-KF ##########################
+
+##### For both DM & LN generation #####
+df.LDA = as(as.matrix(X),"dgCMatrix")
+set.seed(1)
+vanilla.LDA <- LDA(df.LDA,k=8,method="VEM") ## k = 8 (for p = 100), k = 10 (for p = 200), k = 11 (for p = 300) and k = 12 (for p = 400) 
+theta.LDA <- vanilla.LDA@gamma
+beta.LDA <- vanilla.LDA@beta
+beta.LDA <- t(apply(beta.LDA,1,function(row) row/sum(row)))
+X_tilde <- zinck::generateKnockoff(X,theta.LDA,beta.LDA,seed=1) ## Generating vanilla LDA knockoff copy
+W_tilde <- log_normalize(X_tilde) ## Making the knockoff copy compositional
+W <- stat.lasso_coefdiff(W,W_tilde,Y)
+T <- knockoff.threshold(W,fdr=FDR,offset=1) ## Vary FDR accordingly!
+index_est <- which(W>=T) 
+
+
+# For DeepLINK, please refer to the software written in Python 3.7.6 named DeepLINK publicly available in the GitHub repository : https://github.com/zifanzhu/DeepLINK
+# For CKF, please refer to the software published in the supplementary material of the paper: "Compositional knockoff filter for high-dimensional regression analysis of microbiome data" 
+# by Srinivasan et al. (2021)
+# Note that CKF requires a Gurobi license.
+              
