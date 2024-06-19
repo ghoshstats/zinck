@@ -10,6 +10,77 @@ library(zinck)
 library(kosel)
 library(dplyr)
 library(reshape2)
+library(topicmodels)
+
+######################### Stan code for fitting our zinck model ###########################
+
+zinck_code <- "data {
+  int<lower=1> K; // num topics
+  int<lower=1> V; // num words
+  int<lower=0> D; // num docs
+  int<lower=0> n[D, V]; // word counts for each doc
+
+  // hyperparameters
+  vector<lower=0, upper=1>[V] delta;
+}
+
+parameters {
+  simplex[K] theta[D]; // topic mixtures
+  vector<lower=0, upper=1>[V] zeta[K]; // zero-inflated betas
+  vector<lower=0>[V] gamma1[K];
+  vector<lower=0>[V] gamma2[K];
+  vector<lower=0>[K] alpha;
+}
+
+transformed parameters {
+  vector[V] beta[K];
+
+  // Efficiently compute beta using vectorized operations
+  for (k in 1:K) {
+    vector[V] cum_log1m;
+    cum_log1m[1:(V - 1)] = cumulative_sum(log1m(zeta[k, 1:(V - 1)]));
+    cum_log1m[V] = 0;
+    beta[k] = zeta[k] .* exp(cum_log1m);
+    beta[k] = beta[k] / sum(beta[k]);
+  }
+}
+
+
+model {
+  for (k in 1:K) {
+    alpha[k] ~ gamma(100,100);  // Change these hyperparameters as needed
+  }
+  for (d in 1:D) {
+    theta[d] ~ dirichlet(alpha);
+  }
+  for (k in 1:K) {
+    for (m in 1:V) {
+        gamma1[k,m] ~ gamma(1,1);
+        gamma2[k,m] ~ gamma(1,1);
+    }
+  }
+
+  // Zero-inflated beta likelihood and data likelihood
+  for (k in 1:K) {
+    for (m in 1:V) {
+      real lp_non_zero = bernoulli_lpmf(0 | delta[m]) + beta_lpdf(zeta[k, m] | gamma1[k, m], gamma2[k, m]);
+      real lp_zero = bernoulli_lpmf(1 | delta[m]);
+      target += log_sum_exp(lp_non_zero, lp_zero);
+    }
+  }
+
+  // Compute the eta values and data likelihood more efficiently
+  for (d in 1:D) {
+    vector[V] eta = theta[d, 1] * beta[1];
+    for (k in 2:K) {
+      eta += theta[d, k] * beta[k];
+    }
+    eta = eta / sum(eta);
+    n[d] ~ multinomial(eta);
+  }
+}
+"
+
 
 #################################### Working with CRC species level data #############################
 
@@ -113,11 +184,10 @@ for(i in 1:niter)
     X1 <- generate_data(p=ntaxa, seed=i)$X1
     W1 <- generate_data(p=ntaxa, seed=i)$W1
     Y1 <- generate_data(p=ntaxa, seed=i)$Y1
-    
-    ################ Fitting the zinck model ####################
-    
+
     ####################### Continuous Outcomes ##############################
-    
+
+    ################################### Fitting the zinck model ################################################
     ####### Initializing Delta for ADVI ########
     
     dlt <- rep(0,ncol(X1))
@@ -127,7 +197,7 @@ for(i in 1:niter)
     }
     
     zinck_stan_data <- list(
-      K = 15,
+      K = 15,    ### NOTE: K = 15 is optimal for p = 100, K = 16 is optimal for p = 200, K = 17 is optimal for p = 300 and K = 18 is optimal for p = 400.
       V = ncol(X1),
       D = nrow(X1),
       n = X1,
@@ -151,7 +221,7 @@ for(i in 1:niter)
     X1_tilde <- generateKnockoff(X1,theta,beta,seed=1) ## Generating the knockoff copy
     
     W_tilde1 <- log_normalize(X1_tilde) ## Making the knockoff copy compositional
-  
+    #############################################################################################################
     index <- generate_data(p=ntaxa,seed=i)$index ## Index set of the true non-zero signals
     
     ################### Varying the target FDR thresholds #########################
@@ -255,9 +325,58 @@ print(mean(power3_bin_list))
 print(mean(power4_cts_list)) 
 print(mean(power4_bin_list)) 
 
+########################################### Comparing other methods ########################################################
+############################################################################################################################
 
+## The methods under comparison are MX-KF (Model-X Knockoffs) [Candes et al. (2018)], LDA-KF (vanilla LDA Knockoffs), 
+## DeepLINK [Zhu et al. (2021)], and CKF (Compositional Knockoff Filter) [Srinivasan et al. (2021)].
 
+## You can run the same simulation settings by just replacing the "Fitting the zinck model" chunk using the corresponding code blocks --
 
+######################## Fitting MX-KF ##########################
 
+##### For continuous outcomes ######
+set.seed(1)
+kfp = knockoff.filter(X=W1,y=Y1,fdr = FDR,statistic = stat.glmnet_lambdasmax) ## Change FDR accordingly!
+kfStat = kfp$statistic
+t = knockoff.threshold(kfStat, fdr = FDR)
+kfSelect = sort(which(kfStat >= t))
+index_est = kfSelect
 
+##### For binary outcomes ######
+set.seed(1)
+kfp = knockoff.filter(X=W1,y=Y1_bin,fdr = FDR,statistic = stat.lasso_coefdiff_bin) ## Change FDR accordingly!
+kfStat = kfp$statistic
+t = knockoff.threshold(kfStat, fdr = FDR)
+kfSelect = sort(which(kfStat >= t))
+index_est = kfSelect
+
+######################## Fitting LDA-KF ##########################
+
+##### For continuous outcomes #####
+df.LDA = as(as.matrix(X1),"dgCMatrix")
+set.seed(1)
+vanilla.LDA <- LDA(df.LDA,k=6,method="VEM") ## k = 6 (for p = 100, 200, 300) and k = 8 (for p = 400) 
+theta.LDA <- vanilla.LDA@gamma
+beta.LDA <- vanilla.LDA@beta
+beta.LDA <- t(apply(beta.LDA,1,function(row) row/sum(row)))
+X1_tilde <- zinck::generateKnockoff(X1,theta.LDA,beta.LDA,seed=1) ## Generating vanilla LDA knockoff copy
+W_tilde1 <- log_normalize(X1_tilde) ## Making the knockoff copy compositional
+W <- stat.glmnet_coefdiff(W1,W_tilde1,Y1)
+T <- knockoff.threshold(W,fdr=FDR,offset=1) ## Vary FDR accordingly!
+index_est <- which(W>=T) 
+
+##### For binary outcomes #####
+W <- stat.lasso_coefdiff_bin(W1,W_tilde1,Y1_bin)
+T <- knockoff.threshold(W,fdr=FDR,offset=1) ## Vary FDR accordingly!
+index_est <- which(W>=T) 
+
+# For DeepLINK, please refer to the software written in Python 3.7.6 named DeepLINK publicly available in the GitHub repository : https://github.com/zifanzhu/DeepLINK
+# For CKF, please refer to the software published in the supplementary material of the paper: "Compositional knockoff filter for high-dimensional regression analysis of microbiome data" 
+# by Srinivasan et al. (2021)
+# Note that CKF requires a Gurobi license.
+              
+
+                
+              
 
