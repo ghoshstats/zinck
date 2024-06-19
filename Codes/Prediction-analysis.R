@@ -418,7 +418,7 @@ stan.model = stan_model(model_code = zinck_code) ## Defining the stan model
                                
 ############## Leave - one - study - out analysis ############
                                
-left_out_study <- "RISK"
+left_out_study <- "RISK"  ## Try with other studies like "CS-PRISM", "HMP2", "MucosalIBD", and "Pouchitis"
 # Determine the indices for the remaining studies
 remaining_studies <- setdiff(study_names, left_out_study)
 
