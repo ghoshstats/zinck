@@ -109,7 +109,7 @@ To get started with zinck, explore the package vignettes and documentation:
 browseVignettes(package = "zinck")
 
 To get started with zinck, explore the package documentation:
-
+```
 ```r
 # View package documentation
 ?zinck
