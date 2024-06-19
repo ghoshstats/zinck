@@ -16,6 +16,23 @@ selected_cols <- sample(1:ncol(dcount),30)      ## Randomly select 30 taxa
 OTU <- dcount[selected_rows,selected_cols]      ## Resulting OTU matrix of dimensions 20*30
 X <- OTU
 
+draw.heatmap <- function(X, title="") {         ## Function to generate heatmaps
+  reshape2::melt(asinh(X)) %>%
+    dplyr::rename(sample = Var1, taxa = Var2, asinh.abun = value) %>%
+    ggplot2::ggplot(., aes (x = taxa, y = sample, fill = asinh.abun)) +
+    ggplot2::geom_tile() + ggplot2::theme_bw() + ggplot2::ggtitle(title) +
+    ggplot2::labs(fill = "arcsinh\nabundance") +
+    ggplot2::theme(plot.title = element_text(hjust = 0.5),
+                   axis.title.x=element_blank(), axis.title.y=element_blank(),
+                   axis.text.x = element_text(size=3, angle=90), axis.text.y = element_text(size=4)) +
+   viridis::scale_fill_viridis(discrete = FALSE, direction = -1, na.value = "grey") +
+    theme(axis.title.x = element_blank(),axis.text.x = element_blank(),axis.ticks.x=element_blank(),
+          axis.title.y = element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank())+
+    theme(panel.grid.major=element_blank(),panel.grid.minor = element_blank(),
+          panel.background = element_blank(),panel.border = element_blank())+
+    theme(legend.position="none") +
+    ggplot2::coord_fixed(ratio = 1)  # Fixing the aspect ratio
+}
 ################# Zinck ########################
 ################################################
 
@@ -59,20 +76,20 @@ sparsity <- apply(X, 2, function(col) 1 - mean(col > 0))
 # Order the matrix by decreasing sparsity
 X <- X[, order(sparsity, decreasing = FALSE)]
 # Draw the heatmap for the original OTU matrix
-zinck::draw_heatmap(X)
+draw.heatmap(X)
 
 ## Similarly do this for zinck, Model-X and vanilla LDA knockoffs ##
 sparsity <- apply(X_tilde.zinck, 2, function(col) 1 - mean(col > 0))
 X_tilde.zinck <- X_tilde.zinck[, order(sparsity, decreasing = FALSE)]
-zinck::draw_heatmap(X_tilde.zinck)
+draw.heatmap(X_tilde.zinck)
 
 sparsity <- apply(X_tilde.KF, 2, function(col) 1 - mean(col > 0))
 X_tilde.KF <- X_tilde.KF[, order(sparsity, decreasing = FALSE)]
-zinck::draw_heatmap(X_tilde.KF)
+draw.heatmap(X_tilde.KF)
 
 sparsity <- apply(X_tilde.LDA, 2, function(col) 1 - mean(col > 0))
 X_tilde.LDA <- X_tilde.LDA[, order(sparsity, decreasing = FALSE)]
-zinck::draw_heatmap(X_tilde.LDA)
+draw.heatmap(X_tilde.LDA)
 
 
 
