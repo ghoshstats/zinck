@@ -95,6 +95,8 @@ W <- stat.random_forest(X,X_tilde,Y)
 T <- knockoff.threshold(W,fdr=0.1,offset = 0) ## This is the knockoff filter threshold
 print(which(W>=T))
 
+## 8, 16, 22, 24, 28, 32, 37, 61, 65, 69 selected
+
 ############## Feature Importance Plot #############
 names <- colnames(X[,which(W>=T)]) ## Extracting the names of the important genera
 data.genus <- data.frame(
@@ -114,6 +116,8 @@ set.seed(12)
 kfp = knockoff.filter(X=X,y=Y,fdr = 0.1,statistic = stat.random_forest,offset = 0) ## MX knockoffs with random forest
 kfp$selected
 
+## 1,2,8,16,22,28,32,37,69 selected
+
 ## Fitting the standard LDA Knockoff Filter ##
 
 df.LDA <- as(as.matrix(X),"dgCMatrix") ## Converting the matrix X into a dgCMatrix
@@ -127,6 +131,39 @@ set.seed(1)
 W <- stat.random_forest(X,X_tilde.LDA.comb,Y)  ## Fitting a Random Forest model
 T <- knockoff.threshold(W,fdr=0.1,offset = 1)
 print(which(W>=T))
+
+## 1,2,3,8,15,16,22,24,28,32,37,69 selected
+
+############################ Plotting the Venn Diagram ################################
+#######################################################################################
+                      
+zinCK <- c(8, 16, 22, 24, 28, 32, 37, 61, 65, 69)
+KF <- c(1,2,8,16,22,28,32,37,69)
+DL <- c(3,  4,  15,  23,  29,  40,  48,  53,  69, 110, 111, 172)
+vanilla_LDA <- c(1,2,3,8,15,16,22,24,28,32,37,69)
+
+
+venn.plot <- venn.diagram(
+  x = list(zinCK = zinCK, KF = KF, DeepLINK = DL, vanilla_LDA = vanilla_LDA),
+  category.names = c("Zinck" , "MX-KF" , "DeepLINK", "LDA-KF"),
+  filename = 'IBD_genera_venn_diagram.png',
+  output = TRUE,  # Set to FALSE so that we can draw it with grid.draw
+  imagetype="png",
+  height = 600,
+  width = 600,
+  resolution = 400,
+  lwd = 1,
+  col=c("red", 'blue', 'green', "orange"),
+  fill = c(alpha("red", 0.3), alpha('blue', 0.3), alpha('green', 0.3), alpha('orange', 0.3)),
+  cex = 0.5,
+  fontfamily = "sans",
+  cat.cex = 0,  # Modified for readability
+  cat.default.pos = "outer",
+  cat.pos = c(0, 0, 0, 0),  # Modified for 4 categories
+  cat.dist = c(0.055, 0.055, 0.055, 0.055),  # Modified for 4 categories
+  cat.fontfamily = "sans",
+  cat.col = c("red", 'blue', 'green', 'orange')  # Modified for 4 categories
+)
 
 
 
