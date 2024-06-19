@@ -194,8 +194,30 @@ estimated_power <- TP / (TP + FN) # Evaluating the empirical Power or TPR
 print(paste("Estimated FDR:", estimated_FDR))
 print(paste("Estimated Power:", estimated_power))
 ```
+## Replicate studies in the paper
 
-For any issues or further assistance, consult the zinck pdf manual or visit the GitHub repository's Issues section.
+Codes used to replicate both simulation and real data analyses are in the folder `Codes/`. 
+
+### Simulation studies
+
+There are two types of simulation studies: 
+
+(1) Non-parametric Simulations -- where the microbiome data generating process is unknown and involves subsetting from the CRC species level data (https://github.com/zellerlab/crc_meta), also saved in the repository as ``count.Rdata``. The number of taxa is varied from 100 to 400 for both continuous and binary outcome types. The empirical detection powers along with FDRs are recorded for a range of target FDR thresholds. The codes to replicate the analysis can be found in `Codes/Non-parametric Simulations.R`.
+
+(2) Parametric Simulations -- where the microbiome data generating process is known that is, either generated from a Dirichlet Multinomial (DM) setting or a Logistic Normal (LN) setting. The number of taxa is again varied from 100 to 400 and the empirical detection powers along with FDRs are recorded for a range of target FDR thresholds. The codes to replicate the analysis can be found in `Codes/Parametric Simulations.R`.
+
+
+### Real data analyses
+
+(1) CRC data analyses -- The codes to reproduce the Feature Statistics and the Venn Diagram representing the number of biomarkers detected for the `CRC` data can be found in `Codes/CRC-analysis.R`. 
+
+(2) IBD data analyses -- The codes to reproduce the Feature Statistics and the Venn Diagram representing the number of biomarkers detected for the `IBD` data can be found in `Codes/IBD-analysis.R`. 
+
+Furthermore, the codes replicating the Leave-one-study-out prediction analysis for both `CRC` and `IBD` studies can be found in `Codes/Prediction-analysis.R`
+
+The heatmaps to compare the quality of knockoffs for `zinck` and other methods can be replicated using the codes in `Codes/Heatmaps.R`.
+
+For any issues or further assistance, consult the zinck pdf manual saved as `zinck-manual.pdf` or visit the GitHub repository's Issues section.
 
 
 
