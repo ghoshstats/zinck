@@ -10,6 +10,9 @@ library(dirmult)
 library(zinck)
 library(kosel)
 library(rstan)
+library(topicmodels)
+library(dplyr)
+library(reshape2)
 
 load("DirMultOutput.RData")
 
