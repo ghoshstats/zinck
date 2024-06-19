@@ -121,7 +121,7 @@ After installation, you can verify and get a feel for the package's capabilities
 
 ```r
 # Load the dataset
-data("count", package = "zinck")
+load(data/count.Rdata)
 
 # Ordering the columns by decreasing abundance
 dcount <- count[, order(decreasing = TRUE, colSums(count, na.rm = TRUE), apply(count, 2L, paste, collapse = ''))][, 1:300]
