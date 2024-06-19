@@ -7,6 +7,10 @@ library(MethylCapSig)
 library(GUniFrac)
 library(energy)
 library(dirmult)
+library(zinck)
+library(kosel)
+library(rstan)
+
 load("DirMultOutput.RData")
 
 n = 250
