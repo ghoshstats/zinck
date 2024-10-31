@@ -78,16 +78,21 @@ model {
 }
 "
 
-##### CRC data species level ######
-###################################
+################## CRC data species level ##########################
+####################################################################
 
 load("meta.RData")
 load("count.RData")
-dcount <- count[,order(decreasing=T,colSums(count,na.rm=T),apply(count,2L,paste,collapse=''))][,1:300] ## ordering the columns w/ decreasing abundance
+
+############ Filtering the count matrix in terms of abundances ############
+norm_count <- count/rowSums(count)
+col_means <- colMeans(norm_count>0)
+indices <- which(col_means > 0.2)
+sorted_indices <- indices[order(col_means[indices],decreasing = TRUE)]
+dcount <- count[,sorted_indices]
+
 X <- dcount
-Y <- as.factor(meta$Group)
-lookup <- c("CTR" = 0, "CRC" = 1)
-Y <- lookup[Y]    ## Converting into 0/1 data
+Y <- ifelse(meta$Group=="CRC",1,0)
 
 ###################### Method 1: Zinck ##########################################
 dlt <- rep(0,ncol(X)) ## Initializing deltas with the individual column sparsities
@@ -107,7 +112,7 @@ for(t in (1:ncol(X)))
 }
 
 zinLDA_stan_data <- list(
-  K = 19,
+  K = 20,
   V = ncol(X),
   D = nrow(X),
   n = X,
@@ -122,6 +127,7 @@ fitCRC <- vb(stan.model, data=zinLDA_stan_data, algorithm="meanfield", iter=1000
 theta <- fitCRC@sim[["est"]][["theta"]]
 beta <- fitCRC@sim[["est"]][["beta"]]
 X_tilde_CRC <- zinck::generateKnockoff(X,theta,beta,seed=1) ## Generating the knockoff copy
+
 X_aug <- cbind(X,X_tilde_CRC) ## Creating the augmented matrix
 
 ######### Tuning the Random Forest model ####################
@@ -134,41 +140,62 @@ rownames(df_X) <- NULL
 df_X$Y <- Y
 model_rf <- randomForest(formula=as.factor(Y)~.,ntree=1000,mtry=m,importance=TRUE,data=as.matrix(df_X)) ## Fitting the tuned Random Forest model
 cf <- as.data.frame(importance(model_rf))[,3] ## Extracting the Mean Decrease in Impurities for each variable
-W <- abs(cf[1:300])-abs(cf[301:600])
-T <- knockoff.threshold(W,fdr = 0.1, offset = 0) ## This is the knockoff threshold
+W <- abs(cf[1:401])-abs(cf[402:802])
+T <- knockoff.threshold(W,fdr = 0.1, offset = 1) ## This is the knockoff threshold
 print(which(W>=T))
 names_zinck <- colnames(X[,which(W>=T)])
-## Selected Taxa :: 8,  33,  47,  54,  81, 124, 130, 136, 146, 193, 215, 245, 255, 263, 264, 268, 283
+## Selected Taxa :: 36,76,150,158,164,204,236,240,255,259,280,311,331,374
 
 ################# Method 2: Model-X Knockoff Filter ############################
 
-X_tilde_kf <- create.second_order(X) ## Generating the second order Gaussian knockoff copy
-set.seed(2)
-W <- stat.random_forest(X,X_tilde_kf,as.factor(Y)) ## Fitting the Random Forest model
-T <- knockoff.threshold(W,fdr=0.1,offset=0)
+W_kf <- log_normalize(X)
+W_tilde_kf <- create.second_order(W_kf) # Generating the second order Gaussian knockoff copy
+W_aug <- cbind(W_kf,W_tilde_kf) ## Creating the augmented matrix
+
+######### Tuning the Random Forest model ####################
+bestmtry <- tuneRF(W_aug,as.factor(Y),stepFactor = 1.5,improve=1e-5,ntree=1000) ## Getting the best mtry hyperparameter
+m <- bestmtry[as.numeric(which.min(bestmtry[,"OOBError"])),1]
+df_X <- as.data.frame(W_aug)
+colnames(df_X) <- NULL
+rownames(df_X) <- NULL
+df_X$Y <- Y
+set.seed(1)
+model_rf <- randomForest(formula=as.factor(Y)~.,ntree=1000,mtry=m,importance=TRUE,data=as.matrix(df_X)) ## Fitting the tuned Random Forest model
+cf <- as.data.frame(importance(model_rf))[,1] ## Extracting the Mean Decrease in Impurities for each variable
+W <- abs(cf[1:401])-abs(cf[402:802])
+T <- knockoff.threshold(W,fdr = 0.1, offset = 0) ## This is the knockoff threshold
 print(which(W>=T))
-names_KF <- colnames(X[,which(W>=T)])
-## Selected Taxa :: 245, 263
+
+## Selected Taxa :: 36, 101, 150, 370
 
 ################# Method 3: Vanilla LDA model ##################################
-
 df.LDA <- as(as.matrix(X),"dgCMatrix")
 vanilla.LDA.CRC <- LDA(df.LDA,k=16,method="VEM")
 theta.LDA.CRC <- vanilla.LDA.CRC@gamma
 beta.LDA.CRC <- vanilla.LDA.CRC@beta
 beta.LDA.CRC <- t(apply(beta.LDA.CRC, 1, function(row) row/sum(row)))
 X_tilde_LDA.CRC <- zinck::generateKnockoff(X,theta.LDA.CRC,beta.LDA.CRC,seed=1) ## Generating the vanilla LDA knockoff copy
+X_aug <- cbind(X,X_tilde_LDA.CRC) ## Creating the augmented matrix
 
-set.seed(47)
-W <- stat.random_forest(X,X_tilde_LDA.CRC,Y)
-T <- knockoff.threshold(W,fdr=0.1,offset=0)
-print(which(W>=T))
+######### Tuning the Random Forest model ####################
+bestmtry <- tuneRF(W_aug,as.factor(Y),stepFactor = 1.5,improve=1e-5,ntree=1000) ## Getting the best mtry hyperparameter
+m <- bestmtry[as.numeric(which.min(bestmtry[,"OOBError"])),1]
+df_X <- as.data.frame(W_aug)
+colnames(df_X) <- NULL
+rownames(df_X) <- NULL
+df_X$Y <- Y
+set.seed(1)
+model_rf <- randomForest(formula=as.factor(Y)~.,ntree=1000,mtry=m,importance=TRUE,data=as.matrix(df_X)) ## Fitting the tuned Random Forest model
+cf <- as.data.frame(importance(model_rf))[,3] ## Extracting the Mean Decrease in Impurities for each variable
+W <- abs(cf[1:401])-abs(cf[402:802])
+T <- knockoff.threshold(W,fdr = 0.1, offset = 0) ## This is the knockoff threshold
 names_LDA <- colnames(X[,which(W>=T)])
-## Selected Taxa :: 8, 47, 136, 245, 263 
+
+## Selected Taxa :: 5,  36, 102, 150, 158, 164, 236, 255, 311, 331, 374
 
 ################## Method 4: DeepLINK ##########################################
 
-## Selected Taxa :: 6, 47, 54, 63, 84, 89, 114, 124, 136, 137, 161, 173, 174, 176, 194, 207, 223, 240, 245, 247
+## Selected Taxa :: 6,  19, 36, 106, 126, 161, 164, 234, 240, 241, 255, 294, 349
 names_DL <- colnames(X[,which(W>=T)])
 
 ################################################################################
@@ -177,17 +204,56 @@ names_DL <- colnames(X[,which(W>=T)])
 ######### (1) Zinck #############
 #################################
 
+names_zinck <- c("Ruminococcus torques species (1376)","Bacteroides caccae species (1382)","Clostridium symbiosum species (1475)","Hungatella hathewayi species (0882)","Unknown Ruminococcus species (6664)","Unknown Clostridiales species (6105)",  "Parvimonas micra species (1145)","Unknown Clostridium species (5413)","Gemella morbillorum species (4513)","Unknown Clostridiales species (6009)","Clostridium clostridioforme species (0979)", "Peptostreptococcus stomatis species (4614)","Solobacterium moorei species (0531)","Fusobacterium nucleatum species (0776)")
+
 data.species <- data.frame(             ### Creating the data frame with Feature Importance Statistics
   impscores = sort(W[which(W>=T)], decreasing=FALSE) , 
   name = factor(names_zinck, levels = names_zinck),
-  y = seq(length(names)) * 0.9
+  y = seq(length(names_zinck)) * 0.9
 )
 
+norm_count <- count/rowSums(count)
+col_means <- colMeans(norm_count>0)
+indices <- which(col_means > 0)
+sorted_indices <- indices[order(col_means[indices],decreasing = TRUE)]
+Xnorm <-norm_count[,sorted_indices]
+
+# Calculate the column sums for cases and controls
+case_sums <- colMeans(Xnorm[Y == 1, which(W>=T)])
+control_sums <- colMeans(Xnorm[Y == 0, which(W>=T)])
+
+# Determine colors based on the sum comparison
+colors <- ifelse(case_sums > control_sums, "red", "blue")
+
+# Create a vector to indicate which labels should be bold
+bold_indices <- c(2,6,10,11)
+bold_labels <- ifelse(seq_along(names_zinck) %in% bold_indices, "bold", "plain")
+
+# Create a data frame for plotting
+data.species <- data.frame(
+  impscores = sort(W[which(W >= T)], decreasing = FALSE),
+  name = factor(names_zinck, levels = names_zinck),
+  y = seq(length(names_zinck)) * 0.9,
+  color = colors,
+  fontface = bold_labels
+)
+
+tiff("Zinck_CRC_feature_scores_not_log_normalized.tiff", units="in", width=10, height=6, res=600)
 
 plt.species <- ggplot(data.species) +
-  geom_col(aes(impscores, name), fill = "black", width = 0.6)+theme_bw()+ylab("Species")+xlab("Feature Statistic")
-
-plt.species
+  geom_col(aes(impscores, name, fill = color), width = 0.6) +
+  scale_fill_identity() +
+  theme_bw() +
+  ylab("Species") +
+  xlab("Feature Statistic") +
+  theme(
+    axis.title.x = element_text(size = 22),
+    axis.title.y = element_text(size = 22),
+    axis.text.x = element_text(size = 18),
+    axis.text.y = element_text(size = 18, face = data.species$fontface) # Adjust fontface based on the condition
+  )
+print(plt.species)
+dev.off()
 
 ######### (2) Model-X Knockoffs #######
 #######################################
@@ -236,31 +302,30 @@ plt.species
 #############################################################
 
 ####### Set of selected taxa #######
-zinCK <- c(8,  33,  47,  54,  81, 124, 130, 136, 146, 193, 215, 245, 255, 263, 264, 268, 283)
-DL <- c(6, 47, 54, 63, 84, 89, 114, 124, 136, 137, 161, 173, 174, 176, 194, 207, 223, 240, 245, 247)
-KF <- c(245, 263)
-vanilla_LDA <- c(8, 47, 136, 245, 263 )
+zinCK <- c(36,76,150,158,164,204,236,240,255,259,280,311,331,374)
+DL <- c(6,  19, 36, 106, 126, 161, 164, 234, 240, 241, 255, 294, 349)
+KF <- c(36, 101, 150, 370)
+vanilla_LDA <- c(5,  36, 102, 150, 158, 164, 236, 255, 311, 331, 374)
 
 venn.plot <- venn.diagram(
   x = list(zinCK = zinCK, KF = KF, DeepLINK = DL, vanilla_LDA = vanilla_LDA),
-  category.names = c("Zinck" , "KF" , "DeepLINK", "vanilla_LDA"),
-  filename = 'CRC_species_venn_diagram.png',
+  category.names = c("Zinck" , "MX-KF" , "DeepLINK", "LDA-KF"),
+  filename = 'CRC_venn_diagram_not_lognormalized.png',
   output = TRUE,  # Set to FALSE so that we can draw it with grid.draw
   imagetype="png",
   height = 600,
   width = 600,
-  resolution = 300,
+  resolution = 400,
   lwd = 1,
   col=c("red", 'blue', 'green', "orange"),
   fill = c(alpha("red", 0.3), alpha('blue', 0.3), alpha('green', 0.3), alpha('orange', 0.3)),
-  cex = 0.5,
+  cex = 0.7,
   fontfamily = "sans",
-  cat.cex = 0.6,  # Modified for readability
+  cat.cex = 0,  # Modified for readability
   cat.default.pos = "outer",
   cat.pos = c(0, 0, 0, 0),  # Modified for 4 categories
   cat.dist = c(0.055, 0.055, 0.055, 0.055),  # Modified for 4 categories
   cat.fontfamily = "sans",
   cat.col = c("red", 'blue', 'green', 'orange')  # Modified for 4 categories
 )
-
 
