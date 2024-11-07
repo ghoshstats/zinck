@@ -20,12 +20,14 @@ load("genera.RData")
 
 
 ##################################### AUROC values for CRC #############################################
-
-dcount <- count[,order(decreasing=T,colSums(count,na.rm=T),apply(count,2L,paste,collapse=''))][,1:300] ## ordering the columns w/ decreasing abundance
+norm_count <- count/rowSums(count)
+col_means <- colMeans(norm_count > 0)
+indices <- which(col_means > 0.2)
+sorted_indices <- indices[order(col_means[indices], decreasing=TRUE)]
+dcount <- count[,sorted_indices][,1:300]
 X <- dcount
 Y <- as.factor(meta$Group)
-lookup <- c("CTR" = 0, "CRC" = 1)  ### CRC : cases, CTR : controls
-Y <- lookup[Y]    #### Converting into 0/1 data
+Y <- ifelse(meta$Group=="CRC",1,0)
 
 ############ Leave-one study out design ################
 left_out_study <- "AT-CRC" ### Also other studies -- "US-CRC", "CN-CRC", "DE-CRC", "FR-CRC"
@@ -119,7 +121,7 @@ for(i in 1:100)
   
   X_train <- dcount[training_indices,1:300]
   Y_train <- as.factor(meta$Group[training_indices])
-  Y_train <- lookup[Y_train]   
+  Y_train <- ifelse(meta$Group[training_indices]=="CRC",1,0)
 
   ########### Initializing ADVI ##############  
   dlt <- rep(0,ncol(X_train))
@@ -167,7 +169,7 @@ for(i in 1:100)
   all_tprs <- list()
   X_val <- dcount[validation_indices,1:300]
   Y_val <- as.factor(meta$Group[validation_indices])
-  Y_val <- lookup[Y_val]
+  Y_val <- ifelse(meta$Group[validation_indices]=="CRC",1,0)
 
   ########## Normalizing the training and validation sets ############
   norm_train <- as.data.frame(t(apply(X_train,1, function(x) x/sum(x))))
@@ -212,7 +214,7 @@ for(i in 1:100)
   X_all_train <- dcount[all_training_indices,1:300]
   norm_all_train <- as.data.frame(t(apply(X_all_train,1, function(x) x/sum(x))))
   Y_all_train <- as.factor(meta$Group[all_training_indices])
-  Y_all_train <- lookup[Y_all_train]
+  Y_all_train <- ifelse(meta$Group[all_training_indices]=="CRC",1,0)
   
   df_all_train <- as.data.frame(norm_all_train[,selected_taxa])
   
@@ -224,7 +226,7 @@ for(i in 1:100)
   X_test <- dcount[test_indices,1:300]
   norm_test <- as.data.frame(t(apply(X_test,1, function(x) x/sum(x))))
   Y_test <- as.factor(meta$Group[test_indices])
-  Y_test <- lookup[Y_test]
+  Y_test <- ifelse(meta$Group[test_indices]=="CRC",1,0)
   
   df_test <- as.data.frame(norm_test[,selected_taxa])
   xtest <- df_test
