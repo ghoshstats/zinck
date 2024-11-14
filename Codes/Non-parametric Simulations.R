@@ -80,77 +80,55 @@ model {
   }
 }
 "
-
-
 #################################### Working with CRC species level data #############################
 
 generate_data <- function(p,seed){
   dcount <- count[,order(decreasing=T,colSums(count,na.rm=T),apply(count,2L,paste,collapse=''))] ## ordering the columns w/ decreasing abundance
   ####### Randomly sampling patients from 574 observations #######
   set.seed(seed)
-  sel_index <- rbinom(nrow(meta),size=1,prob=0.5)
-  selected_samples <- which(sel_index==1)
-  meta_selected <- meta[selected_samples,]
-  X <- dcount[selected_samples,]
-  if(p == 100){
-    X1 <- X[,1:p]
-    n = nrow(X1)
+  norm_count <- count/rowSums(count)
+  col_means <- colMeans(norm_count > 0)
+  indices <- which(col_means > 0.2)
+  sorted_indices <- indices[order(col_means[indices], decreasing=TRUE)]
+   if(p %in% c(100,200,300,400)){
+     dcount <- count[,sorted_indices][,1:p]
+     sel_index <- sort(sample(1:nrow(dcount), 250))
+     dcount <- dcount[sel_index,]
+     original_OTU <- dcount + 0.5
+     seq_depths <- rowSums(original_OTU)
+     Pi = sweep(original_OTU, 1, seq_depths, "/")
+     n = nrow(Pi)
     
-    Five1 = c(-3,3,2.5,-1, -1.5)
-    Five2 = c(3,3,-2,-2,-2)
-    Five3 = c(1,-1,3,-2,-1)
-    Five4 = c(-1,1,2,-1,-1)
-    Five5 = c(3,3,-3,-2,-1)
-    Five6 = c(-1,1,-2,1,1)
-    Five_all <- c(Five1,Five2,Five3,Five4,Five5,Five6)  ## Signals satisfy sum-to-zero constraint ##
-    randBeta <- rep(0,p)
-    set.seed(1)
-    rand_indices <- sample(1:p,size=30,replace=FALSE)  ## Randomly injecting 30 signals out of p=100 ##
-    set.seed(1)
-    randBeta[rand_indices] <- sample(Five_all,size=30,replace=FALSE)
-    
-    W1 <- log_normalize(X1) ## log-normalizing counts to make it compositional
+    col_abundances = colMeans(Pi)
     
     ##### Generating continuous responses ######
     set.seed(1)
+    signals = (2 * rbinom(30, 1, 0.5) - 1) * runif(30, 1.5, 3)
+    kBeta = c(signals / sqrt(col_abundances[1:30]), rep(0, p - 30))
     eps=rnorm(n,mean = 0, sd=1)
-    Y1 <- W1 %*% randBeta + eps
-    
+    Y <- Pi^2 %*% (kBeta/2) + Pi %*% kBeta + eps
+        
     ##### Generating binary responses #####
     set.seed(1)
-    pr = 1/(1+exp(-W1 %*% randBeta))
-    Y1_bin = rbinom(n,1,pr)
-  } else if (p %in% c(200,300,400)) {
-    X1 <- X[,1:p]
-    n = nrow(X1)
-    
-    Five1 = c(-3,3,2.5,-1, -1.5)
-    Five2 = c(3,3,-2,-2,-2)
-    Five3 = c(1,-1,3,-2,-1)
-    Five4 = c(-1,1,2,-1,-1)
-    Five5 = c(3,3,-3,-2,-1)
-    Five6 = c(-1,1,-2,1,1)
-    Five_all <- c(Five1,Five2,Five3,Five4,Five5,Five6)  ## Signals satisfy sum-to-zero constraint ##
-    randBeta <- rep(0,p)
-    set.seed(1)
-    rand_indices <- sample(1:200,size=30,replace=FALSE)  ## Randomly injecting 30 signals out of p=200 ##
-    set.seed(1)
-    randBeta[rand_indices] <- sample(Five_all,size=30,replace=FALSE)
-    
-    W1 <- log_normalize(X1) ## log-normalizing counts to make it compositional
-    
-    ##### Generating continuous responses ######
-    set.seed(1)
-    eps=rnorm(n,mean = 0, sd=1)
-    Y1 <- W1 %*% randBeta + eps
-    
-    ##### Generating binary responses #####
-    set.seed(1)
-    pr = 1/(1+exp(-W1 %*% randBeta))
-    Y1_bin = rbinom(n,1,pr)
-  }
+    signals = (2 * rbinom(30, 1, 0.5) - 1) * runif(30, 3, 10)
+    kBeta = c(signals / sqrt(col_abundances[1:30]), rep(0, p - 30))
+    pr = 1/(1+exp(-(Pi^2 %*% (kBeta/2) + Pi %*% kBeta)))
+    Y_bin = rbinom(n,1,pr)
 
-  return(list(Y1 = Y1, X1 = X1,  W1 = W1, Y1_bin = Y1_bin, index = rand_indices))
+    ######### Generate a copy of X #########
+    X <- matrix(0, nrow = nrow(Pi), ncol = ncol(Pi))
+    nSeq <- seq_depths
+    # Loop over each row to generate the new counts based on the multinomial distribution
+ 
+    set.seed(1)
+ 
+    for (i in 1:nrow(Pi)) {
+    X[i, ] <- rmultinom(1, size = nSeq, prob = Pi[i, ])
+  }  
+  } else if (p %in% c(200,300,400)) {
+    print("Enter p within 100 to 400")
+  }
+return(list(Y = Y, X = X, Y_bin = Y_bin, index = 1:30))
 }
 
 #niter = 100
@@ -182,7 +160,6 @@ for(i in 1:niter)
 {
   tryCatch({
     X1 <- generate_data(p=ntaxa, seed=i)$X1
-    W1 <- generate_data(p=ntaxa, seed=i)$W1
     Y1 <- generate_data(p=ntaxa, seed=i)$Y1
 
     ####################### Continuous Outcomes ##############################
@@ -337,6 +314,7 @@ print(mean(power4_bin_list))
 
 ##### For continuous outcomes ######
 set.seed(1)
+W1 = log_normalize(X1)
 kfp = knockoff.filter(X=W1,y=Y1,fdr = FDR,statistic = stat.glmnet_lambdasmax) ## Change FDR accordingly!
 kfStat = kfp$statistic
 t = knockoff.threshold(kfStat, fdr = FDR)
