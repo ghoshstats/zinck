@@ -1,4 +1,3 @@
-
 #' @title Zinck Filter for Variable Selection
 #' @description Performs variable selection by fitting the augmented set of features to the response, using a glmnet or Random Forest model
 #' @param X An OTU matrix with dimensions \eqn{D \times p}.
@@ -10,15 +9,14 @@
 #' @param seed Numeric; the seed for reproducibility.
 #' @param ntrees Numeric; the number of trees for Random Forest. Default is 1000.
 #' @param tune_mtry Logical; whether to tune mtry in Random Forest. Default is FALSE.
+#' @param mtry Numeric; the number of variables randomly sampled as candidates at each split in Random Forest. Default is NULL (auto-tuned).
 #' @return A vector of selected variables at a target false discovery rate
-#' @importFrom knockoff knockoff.threshold stat.random_forest
+#' @importFrom knockoff knockoff.threshold
 #' @importFrom randomForest tuneRF randomForest importance
 #' @importFrom glmnet cv.glmnet glmnet
 #' @importFrom stats coef
-
 #' @export
-zinck.filter <- function(X, X_tilde, Y, model, fdr = 0.1, offset = 1, seed = NULL, ntrees = 1000, tune_mtry = FALSE) {
-
+zinck.filter <- function(X, X_tilde, Y, model, fdr = 0.1, offset = 1, seed = NULL, ntrees = 1000, tune_mtry = FALSE, mtry = NULL) {
   # Check for input errors
   if (!is.matrix(X) || !is.matrix(X_tilde)) stop("X and X_tilde must be matrices.")
   if (ncol(X) != ncol(X_tilde)) stop("X and X_tilde must have the same number of columns.")
@@ -29,73 +27,39 @@ zinck.filter <- function(X, X_tilde, Y, model, fdr = 0.1, offset = 1, seed = NUL
   if (!is.null(seed) && (!is.numeric(seed) || seed <= 0)) stop("seed must be a positive numeric value.")
   if (model == "Random Forest" && (!is.numeric(ntrees) || ntrees <= 0)) stop("ntrees must be a positive numeric value.")
   if (model == "Random Forest" && !is.logical(tune_mtry)) stop("tune_mtry must be TRUE or FALSE.")
-
+  if (!is.null(mtry) && (!is.numeric(mtry) || mtry <= 0)) stop("mtry must be a positive numeric value.")
+  
   X_aug <- cbind(X, X_tilde)
-
+  
   if (model == "glmnet") {
     if (is.factor(Y) || length(unique(Y)) == 2) { # Binary response
-      W <- stat.lasso_coefdiff_bin(X,X_tilde,Y)
+      W <- stat.lasso_coefdiff_bin(X, X_tilde, Y)
     } else { # Continuous response
-      W <- stat.lasso_coefdiff(X,X_tilde,Y)
+      W <- stat.lasso_coefdiff(X, X_tilde, Y)
     }
-
-    T <- (1-fdr)*ko.sel(W, print = FALSE, method = "gaps")$threshold
-    selected_glm = sort(which(W >= T))
+    T <- knockoff.threshold(W, fdr = fdr, offset = offset)
+    selected_glm <- sort(which(W >= T))
     cat('\nSelected variables:\n')
     print(selected_glm)
-      cv_model <- cv.glmnet(X_aug, Y, alpha = 1, family = "binomial")
-    } else { # Continuous response
-      cv_model <- cv.glmnet(X_aug, Y, alpha = 1)
-    }
-
-    best_lambda <- cv_model$lambda.min
-    tuned_glmnet_model <- glmnet(X_aug, Y, alpha = 1, lambda = best_lambda, family = ifelse(is.factor(Y), "binomial", "gaussian"))
-    cf <- as.numeric(coef(tuned_glmnet_model))
-    W <- abs(cf[2:(ncol(X)+1)])-abs(cf[(ncol(X)+2):(ncol(X_aug)+1)])
+    return(selected_glm)
   } else if (model == "Random Forest") {
-    if (tune_mtry) {
-      if (is.factor(Y) || length(unique(Y)) == 2) {
-      bestmtry <- tuneRF(X_aug, as.factor(Y), stepFactor = 1.5, improve = 1e-5, ntree = ntrees)
-      m <- bestmtry[as.numeric(which.min(bestmtry[,"OOBError"])), 1]
-      df_augmented <- as.data.frame(X_aug)
-      colnames(df_augmented) <- NULL
-      rownames(df_augmented) <- NULL
-      df_augmented$Y <- Y
-      set.seed(seed)
-      model_rf_tuned <- randomForest(formula=Y~.,ntree=ntrees,mtry=m,importance=TRUE,data=as.matrix(df_augmented))
-      cf <- as.data.frame(importance(model_rf_tuned))[,1]
-      W <- abs(cf[1:ncol(X)])-abs(cf[ncol(X)+1:ncol(X_aug)])
-      } else{
-        bestmtry <- tuneRF(X_aug, Y, stepFactor = 1.5, improve = 1e-5, ntree = ntrees)
-        m <- bestmtry[as.numeric(which.min(bestmtry[,"OOBError"])), 1]
-        df_augmented <- as.data.frame(X_aug)
-        colnames(df_augmented) <- NULL
-        rownames(df_augmented) <- NULL
-        df_augmented$Y <- Y
-        set.seed(seed)
-        model_rf_tuned <- randomForest(formula=as.factor(Y)~.,ntree=ntrees,mtry=m,importance=TRUE,data=as.matrix(df_augmented))
-        cf <- as.data.frame(importance(model_rf_tuned))[,1]
-        W <- abs(cf[1:ncol(X)])-abs(cf[ncol(X)+1:ncol(X_aug)])
-      }
+    set.seed(seed)
+    if (is.null(mtry)) { # Tune mtry if not provided
+      if (tune_mtry) {
+        bestmtry <- tuneRF(X_aug, Y, stepFactor = 1.5, improve = 1e-5, ntree = ntrees, trace = FALSE)
+        mtry <- bestmtry[as.numeric(which.min(bestmtry[, "OOBError"])), 1]
       } else {
-      set.seed(seed)
-      if (is.factor(Y) || length(unique(Y)) == 2) { # Binary response
-        W <- stat.random_forest(X, X_tilde, as.factor(Y))
-      } else { # Continuous response
-        W <- stat.random_forest(X, X_tilde, Y)
+        mtry <- floor(sqrt(ncol(X_aug))) # Default mtry
       }
-      }
+    }
+    set.seed(seed)
+    model_rf <- randomForest(X_aug, Y, ntree = ntrees, mtry = mtry, importance = TRUE)
+    cf <- importance(model_rf)[, 1]
+    W <- abs(cf[1:ncol(X)]) - abs(cf[(ncol(X) + 1):ncol(X_aug)])
     T <- knockoff.threshold(W, fdr = fdr, offset = offset)
-    selected_rf = sort(which(W >= T))
+    selected_rf <- sort(which(W >= T))
     cat('\nSelected variables:\n')
     print(selected_rf)
+    return(selected_rf)
   }
-    }
-  }
-  T <- knockoff.threshold(W, fdr = fdr, offset = offset)
-  selected = sort(which(W >= T))
-  cat('\nSelected variables:\n')
-  print(selected)
 }
-
-
