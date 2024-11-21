@@ -128,290 +128,399 @@ mvlognormal<-function(n , Mu, Sigma, R, seed){
   return(X);
 }
 
-########## Function to generate Dirichlet Multinomial (DM) and Logistic Normal (LN) data ############
+########################## DM data generation ############################
+power1_DM_cts_list <- c()
+power2_DM_cts_list <- c()
+power3_DM_cts_list <- c()
+power4_DM_cts_list <- c()
 
-generate_data_parametric <- function(p,type,seed){
-  ### Beta Vector
-  Five1 = c(-3,3,2.5,-1, -1.5)
-  Five2 = c(3,3,-2,-2,-2)
-  Five3 = c(1,-1,3,-2,-1)
-  Five4 = c(-1,1,2,-1,-1)
-  Five5 = c(3,3,-3,-2,-1)
-  Five6 = c(-1,1,-2,1,1)
-  kBeta = c(Five1, Five2, Five3, Five4, Five5, Five6,rep(0,p - 30))
-  if(type=="DM"){
-    data(throat.tree)
-    data(throat.otu.tab)
-    tree = throat.tree 
-    tree.dist = cophenetic(tree)
-    otu.ids <- tree$tip.label
+power1_DM_bin_list <- c()
+power2_DM_bin_list <- c()
+power3_DM_bin_list <- c()
+power4_DM_bin_list <- c()
 
-    set.seed(seed)
-    p.est = dd$pi
-    names(p.est) <- names(dd$pi)
-    theta <- dd$theta
-    gplus <- (1 - theta) / theta
-    p.est <- p.est[otu.ids]
-    g.est <- p.est * gplus
-    comm <- matrix(0, n , length(g.est))  
-    rownames(comm) <- 1:nrow(comm)
-    colnames(comm) <- names(g.est)
-    comm.p <- comm   # comm.p hold the underlying proportions
-    nSeq <- rnbinom(n , mu = 10000, size = 25)
-    for (i in 1:n ) {
-      comm.p[i, ] <- rdirichlet(1, g.est)[1, ]
-      comm[i, ] <- rmultinom(1, nSeq[i], prob=comm.p[i, ])[, 1]
-    }
-    colindex=order(p.est, decreasing = T)[1:p]
-    X = comm[,colindex]
-    W = log_normalize(X)
-    ##### Generating continuous responses ######
-    set.seed(1)
-    eps=rnorm(n,mean = 0, sd=1)
-    Y <- W %*% kBeta + eps
-  } else if (type=="LN"){
-    ### Generate covariance matrix ###
-    sigma = matrix(0,p,p)
-    gamma = 0.5
-    for(i in 1:nrow(sigma)){
-      for(j in 1:nrow(sigma)){
-        sigma[i,j] = gamma^(abs(i-j))   
-      }
-    }
-    ### Generate mean ###
-    means = rep(1,p)
 
-    W = mvlognormal(n, means, Sigma = diag(sigma), R = sigma,seed=seed)
-    Z = matrix(0, nrow(W), ncol(W))
-    X = matrix(0, nrow(W), ncol(W))
-    
-    set.seed(1)
-    N <- rnbinom(n,size=25,mu=8000) ## Library sizes
-    
-    rowW = rowSums(W)
-    colW = colSums(W)
-    Z <- sweep(W, 1, rowW, "/")
-    X <- floor(N * Z)
-    colnames(X) <-  c(paste0("Taxa", 1:p))
-    colnames(W) <-  c(paste0("Taxa", 1:p))
-    ##### Generating continuous responses ######
-    set.seed(1)
-    eps=rnorm(n,mean = 0, sd=1)
-    Y <- W %*% kBeta + eps
-  }
-  return(list(Y = Y, X = X,  W = W))
-}
+fdr1_DM_cts_list <- c()
+fdr2_DM_cts_list <- c()
+fdr3_DM_cts_list <- c()
+fdr4_DM_cts_list <- c()
 
-power1_DM_list <- c()
-power2_DM_list <- c()
-power3_DM_list <- c()
-power4_DM_list <- c()
+fdr1_DM_bin_list <- c()
+fdr2_DM_bin_list <- c()
+fdr3_DM_bin_list <- c()
+fdr4_DM_bin_list <- c()
 
-fdr1_DM_list <- c()
-fdr2_DM_list <- c()
-fdr3_DM_list <- c()
-fdr4_DM_list <- c()
+data(throat.tree)
+data(throat.otu.tab)
+tree = throat.tree 
+tree.dist = cophenetic(tree)
+otu.ids <- tree$tip.label
 
-power1_LN_list <- c()
-power2_LN_list <- c()
-power3_LN_list <- c()
-power4_LN_list <- c()
-
-fdr1_LN_list <- c()
-fdr2_LN_list <- c()
-fdr3_LN_list <- c()
-fdr4_LN_list <- c()
-
-for(i in 1:niter)
+for(i in 1:200)
 {
-  tryCatch({
-    
-    ################### DM generation ######################
-    X <- generate_data_parametric(p=100, type="DM", seed=i)$X
-    W <- generate_data_parametric(p=100, type="DM", seed=i)$W
-    Y <- generate_data_parametric(p=100, type="DM", seed=i)$Y
-    
-    ################ Fitting the zinck model ####################
-    
-    ####### Initializing Delta for ADVI ########
-    
-    dlt <- rep(0,ncol(X))
-    
-    for(t in (1:ncol(X)))
-    {
-      dlt[t] <- 1-mean(X[,t]>0)
-    }
-    
-    zinck_stan_data <- list(
-      K = 8, ## k = 8 (for p = 100), k = 10 (for p = 200), k = 12 (for p = 300) and k = 15 (for p = 400) 
-      V = ncol(X),
-      D = nrow(X),
-      n = X,
-      delta = dlt
-    )
-  
-    set.seed(seed_list_DM[i])
-    fit_zinck <- vb(
-      stan.model,
-      data = zinck_stan_data,
-      algorithm = "meanfield",
-      importance_resampling = TRUE,
-      iter = 10000,
-      tol_rel_obj = 0.01,
-      elbo_samples = 500
-    )
-    beta <- fit_zinck@sim[["est"]][["beta"]]
-    theta <- fit_zinck@sim[["est"]][["theta"]]
-    X_tilde <- zinck::generateKnockoff(X,theta,beta,seed=1)
-    W_tilde <- log_normalize(X_tilde)
-
-    index <- 1:30 ## Index set of the true non-zero signals
-    
-    ################### Varying the target FDR thresholds #########################
-    
-    ############## FDR = 0.05 ###############
-    index_est <- zinck.filter(W,W_tilde,Y,model="glmnet",fdr=0.05)
-    FN <- sum(index %in% index_est == FALSE) 
-    FP <- sum(index_est %in% index == FALSE)
-    TP <- sum(index_est %in% index == TRUE)
-    
-    fdr1_DM_list[i] <- FP/(FP+TP)
-    power1_DM_list[i] <- TP/(TP+FN)
-    
-    ############### FDR = 0.1 ################
-    index_est <- zinck.filter(W,W_tilde,Y,model="glmnet",fdr=0.1)
-    FN <- sum(index %in% index_est == FALSE) 
-    FP <- sum(index_est %in% index == FALSE)
-    TP <- sum(index_est %in% index == TRUE)
-    
-    fdr2_DM_list[i] <- FP/(FP+TP)
-    power2_DM_list[i] <- TP/(TP+FN)
-    
-    ################ FDR = 0.15 ###############
-    index_est <- zinck.filter(W,W_tilde,Y,model="glmnet",fdr=0.15)
-    FN <- sum(index %in% index_est == FALSE) 
-    FP <- sum(index_est %in% index == FALSE)
-    TP <- sum(index_est %in% index == TRUE)
-    
-    fdr3_DM_list[i] <- FP/(FP+TP)
-    power3_DM_list[i] <- TP/(TP+FN)
-    
-    ################ FDR = 0.2 ################
-    index_est <- zinck.filter(W,W_tilde,Y,model="glmnet",fdr=0.2)
-    FN <- sum(index %in% index_est == FALSE) 
-    FP <- sum(index_est %in% index == FALSE)
-    TP <- sum(index_est %in% index == TRUE)
-    
-    fdr4_DM_list[i] <- FP/(FP+TP)
-    power4_DM_list[i] <- TP/(TP+FN)
-    
-    
-    ############################ LN generation #################################
-    
-    
-    X <- generate_data_parametric(p=100, type="LN", seed=i)$X
-    W <- generate_data_parametric(p=100, type="LN", seed=i)$W
-    Y <- generate_data_parametric(p=100, type="LN", seed=i)$Y
-    
-    ################ Fitting the zinck model ####################
-    
-    ####### Initializing Delta for ADVI ########
-    
-    dlt <- rep(0,ncol(X))
-    
-    for(t in (1:ncol(X)))
-    {
-      dlt[t] <- 1-mean(X[,t]>0)
-    }
-    
-    zinck_stan_data <- list(
-      K = 8,      ## k = 8 (for p = 100), k = 10 (for p = 200), k = 11 (for p = 300) and k = 12 (for p = 400) 
-      V = ncol(X),
-      D = nrow(X),
-      n = X,
-      delta = dlt
-    )
-    
-    stan.model <- stan_model(model_code = zinck_code)
-    set.seed(seed_list_LN[i])
-    fit_zinck <- vb(
-      stan.model,
-      data = zinck_stan_data,
-      algorithm = "meanfield",
-      importance_resampling = TRUE,
-      iter = 10000,
-      tol_rel_obj = 0.01,
-      elbo_samples = 500
-    )
-    beta <- fit_zinck@sim[["est"]][["beta"]]
-    theta <- fit_zinck@sim[["est"]][["theta"]]
-    X_tilde <- zinck::generateKnockoff(X,theta,beta,seed=1)
-    W_tilde <- log_normalize(X_tilde)
-    
-    index <- 1:30 ## Index set of the true non-zero signals
-    
-    ################### Varying the target FDR thresholds #########################
-    
-    ############## FDR = 0.05 ###############
-    index_est <- zinck.filter(W,W_tilde,Y,model="glmnet",fdr=0.05)
-    FN <- sum(index %in% index_est == FALSE) 
-    FP <- sum(index_est %in% index == FALSE)
-    TP <- sum(index_est %in% index == TRUE)
-    
-    fdr1_LN_list[i] <- FP/(FP+TP)
-    power1_LN_list[i] <- TP/(TP+FN)
-    
-    ############### FDR = 0.1 ################
-    index_est <- zinck.filter(W,W_tilde,Y,model="glmnet",fdr=0.1)
-    FN <- sum(index %in% index_est == FALSE) 
-    FP <- sum(index_est %in% index == FALSE)
-    TP <- sum(index_est %in% index == TRUE)
-    
-    fdr2_LN_list[i] <- FP/(FP+TP)
-    power2_LN_list[i] <- TP/(TP+FN)
-    
-    ################ FDR = 0.15 ###############
-    index_est <- zinck.filter(W,W_tilde,Y,model="glmnet",fdr=0.15)
-    FN <- sum(index %in% index_est == FALSE) 
-    FP <- sum(index_est %in% index == FALSE)
-    TP <- sum(index_est %in% index == TRUE)
-    
-    fdr3_LN_list[i] <- FP/(FP+TP)
-    power3_LN_list[i] <- TP/(TP+FN)
-    
-    ################ FDR = 0.2 ################
-    index_est <- zinck.filter(W,W_tilde,Y,model="glmnet",fdr=0.2)
-    FN <- sum(index %in% index_est == FALSE) 
-    FP <- sum(index_est %in% index == FALSE)
-    TP <- sum(index_est %in% index == TRUE)
-    
-    fdr4_LN_list[i] <- FP/(FP+TP)
-    power4_LN_list[i] <- TP/(TP+FN)
-    
-    
-  }, error = function(e) {
-    cat("An error occurred in iteration", i, "\n")
-  })
+set.seed(i)
+p.est = dd$pi
+names(p.est) <- names(dd$pi)
+theta <- dd$theta
+gplus <- (1 - theta) / theta
+p.est <- p.est[otu.ids]
+g.est <- p.est * gplus
+comm <- matrix(0, n , length(g.est))  
+rownames(comm) <- 1:nrow(comm)
+colnames(comm) <- names(g.est)
+comm.p <- comm   # comm.p hold the underlying proportions
+nSeq <- rnbinom(n , mu = 10000, size = 25)
+for (i in 1:n ) {
+    comm.p[i, ] <- rdirichlet(1, g.est)[1, ]
+    comm[i, ] <- rmultinom(1, nSeq[i], prob=comm.p[i, ])[, 1]
 }
+colindex=order(p.est, decreasing = T)[1:p]
+X = comm[,colindex]
+#W = log_normalize(X)
+##### Generating continuous responses ######
+rowX = rowSums(X)
+Pi = sweep(X, 1, rowX, "/")
+col_abundances = colMeans(Pi)
+set.seed(1)
+signals = (2 * rbinom(30, 1, 0.5) - 1) * runif(30, 1.5, 3)
+kBeta = c(signals / sqrt(col_abundances[1:30]), rep(0, p - 30))
+eps=rnorm(n,mean = 0, sd=1)
+Y <- Pi^2 %*% (kBeta/2) + Pi %*% kBeta + eps
+X <- matrix(0, nrow = nrow(Pi), ncol = ncol(Pi))
+ 
+# Loop over each row to generate the new counts based on the multinomial distribution
+ 
+nSeq = 25000
+set.seed(1)
+for (i in 1:nrow(Pi)) {
+  X[i, ] <- rmultinom(1, size = nSeq, prob = Pi[i, ])
+}
+ 
+colnames(X) <- colnames(Pi)
+rownames(X) <- rownames(Pi)
+dlt <- rep(0,ncol(X))
+for(t in (1:ncol(X)))
+{
+dlt[t] <- 1-mean(X[,t]>0)
+}
+    
+zinck_stan_data <- list(
+K = 16,
+V = ncol(X),
+D = nrow(X),
+n = X,
+delta = dlt
+)
+stan.model <- stan_model(model_code = zinck_code)
+    
+set.seed(1)
+    
+fit_zinck <- vb(
+stan.model,
+data = zinck_stan_data,
+algorithm = "meanfield",
+importance_resampling = TRUE,
+iter = 10000,
+tol_rel_obj = 0.01,
+elbo_samples = 500
+)
+beta <- fit_zinck@sim[["est"]][["beta"]]
+theta <- fit_zinck@sim[["est"]][["theta"]]
+    
+X_tilde <- generateKnockoff(X,theta,beta,seed=1)
+index <- 1:30 ## Index set of the true non-zero signals
+################### Varying the target FDR thresholds #########################
+############## FDR = 0.05 ###############
+index_est <- zinck.filter(X,X_tilde,Y,model="Random Forest",fdr=0.05)
+FN <- sum(index %in% index_est == FALSE) 
+FP <- sum(index_est %in% index == FALSE)
+TP <- sum(index_est %in% index == TRUE)
+    
+fdr1_DM_cts_list[i] <- FP/(FP+TP)
+power1_DM_cts_list[i] <- TP/(TP+FN)
+    
+############### FDR = 0.1 ################
+index_est <- zinck.filter(X,X_tilde,Y,model="Random Forest",fdr=0.1)
+FN <- sum(index %in% index_est == FALSE) 
+FP <- sum(index_est %in% index == FALSE)
+TP <- sum(index_est %in% index == TRUE)
+    
+fdr2_DM_cts_list[i] <- FP/(FP+TP)
+power2_DM_cts_list[i] <- TP/(TP+FN)
+    
+################ FDR = 0.15 ###############
+index_est <- zinck.filter(X,X_tilde,Y,model="Random Forest",fdr=0.15)
+FN <- sum(index %in% index_est == FALSE) 
+FP <- sum(index_est %in% index == FALSE)
+TP <- sum(index_est %in% index == TRUE)
+    
+fdr3_DM_cts_list[i] <- FP/(FP+TP)
+power3_DM_cts_list[i] <- TP/(TP+FN)
+    
+################ FDR = 0.2 ################
+index_est <- zinck.filter(X,X_tilde,Y,model="Random Forest",fdr=0.2)
+FN <- sum(index %in% index_est == FALSE) 
+FP <- sum(index_est %in% index == FALSE)
+TP <- sum(index_est %in% index == TRUE)
+    
+fdr4_DM_cts_list[i] <- FP/(FP+TP)
+power4_DM_cts_list[i] <- TP/(TP+FN)
+
+########## Generating binary response ############
+set.seed(1)
+signals = (2 * rbinom(30, 1, 0.5) - 1) * runif(30, 3, 10)
+kBeta = c(signals / sqrt(col_abundances[1:30]), rep(0, p - 30))
+pr = 1/(1+exp(-(Pi^2 %*% (kBeta/2) + Pi %*% kBeta)))
+Y_bin = rbinom(n,1,pr)
+
+################### Varying the target FDR thresholds #########################
+############## FDR = 0.05 ###############
+index_est <- zinck.filter(X,X_tilde,as.factor(Y_bin),model="Random Forest",fdr=0.05)
+FN <- sum(index %in% index_est == FALSE) 
+FP <- sum(index_est %in% index == FALSE)
+TP <- sum(index_est %in% index == TRUE)
+    
+fdr1_DM_bin_list[i] <- FP/(FP+TP)
+power1_DM_bin_list[i] <- TP/(TP+FN)
+    
+############### FDR = 0.1 ################
+index_est <- zinck.filter(X,X_tilde,as.factor(Y_bin),model="Random Forest",fdr=0.1)
+FN <- sum(index %in% index_est == FALSE) 
+FP <- sum(index_est %in% index == FALSE)
+TP <- sum(index_est %in% index == TRUE)
+    
+fdr2_DM_bin_list[i] <- FP/(FP+TP)
+power2_DM_bin_list[i] <- TP/(TP+FN)
+    
+################ FDR = 0.15 ###############
+index_est <- zinck.filter(X,X_tilde,as.factor(Y_bin),model="Random Forest",fdr=0.15)
+FN <- sum(index %in% index_est == FALSE) 
+FP <- sum(index_est %in% index == FALSE)
+TP <- sum(index_est %in% index == TRUE)
+    
+fdr3_DM_bin_list[i] <- FP/(FP+TP)
+power3_DM_bin_list[i] <- TP/(TP+FN)
+    
+################ FDR = 0.2 ################
+index_est <- zinck.filter(X,X_tilde,as.factor(Y_bin),model="Random Forest",fdr=0.2)
+FN <- sum(index %in% index_est == FALSE) 
+FP <- sum(index_est %in% index == FALSE)
+TP <- sum(index_est %in% index == TRUE)
+    
+fdr4_DM_bin_list[i] <- FP/(FP+TP)
+power4_DM_bin_list[i] <- TP/(TP+FN)
+}
+
+
+
+
+
+########################## LN data generation ############################
+power1_LN_cts_list <- c()
+power2_LN_cts_list <- c()
+power3_LN_cts_list <- c()
+power4_LN_cts_list <- c()
+
+power1_LN_bin_list <- c()
+power2_LN_bin_list <- c()
+power3_LN_bin_list <- c()
+power4_LN_bin_list <- c()
+
+
+fdr1_LN_cts_list <- c()
+fdr2_LN_cts_list <- c()
+fdr3_LN_cts_list <- c()
+fdr4_LN_cts_list <- c()
+
+fdr1_LN_bin_list <- c()
+fdr2_LN_bin_list <- c()
+fdr3_LN_bin_list <- c()
+fdr4_LN_bin_list <- c()
+
+sigma = matrix(0,p,p)
+gamma = 0.5
+for(i in 1:nrow(sigma)){
+    for(j in 1:nrow(sigma)){
+        sigma[i,j] = gamma^(abs(i-j))   
+    }
+}
+### Generate mean ###
+means = rep(1,p)
+
+for(i in 1:200)
+{
+W = mvlognormal(n, means, Sigma = diag(sigma), R = sigma,seed=i)
+rowW = rowSums(W)
+Pi = sweep(W, 1, rowW, "/")
+colnames(Pi) <-  c(paste0("Taxa", 1:p))
+
+X <- matrix(0, nrow = nrow(Pi), ncol = ncol(Pi))
+    
+# Loop over each row to generate the new counts based on the multinomial distribution
+nSeq = 25000
+set.seed(1)
+for (i in 1:nrow(Pi)) {
+    X[i, ] <- rmultinom(1, size = nSeq, prob = Pi[i, ])
+}
+    
+colnames(X) <- colnames(Pi)
+rownames(X) <- rownames(Pi)
+##### Generating continuous responses ######
+col_abundances = colMeans(Pi)
+set.seed(1)
+signals = (2 * rbinom(30, 1, 0.5) - 1) * runif(30, 1.5, 3)
+kBeta = c(signals / sqrt(col_abundances[1:30]), rep(0, p - 30))
+eps=rnorm(n,mean = 0, sd=1)
+Y <- Pi^2 %*% (kBeta/2) + Pi %*% kBeta + eps
+
+dlt <- rep(0,ncol(X))
+for(t in (1:ncol(X)))
+{
+dlt[t] <- 1-mean(X[,t]>0)
+}
+    
+zinck_stan_data <- list(
+K = 16,
+V = ncol(X),
+D = nrow(X),
+n = X,
+delta = dlt
+)
+stan.model <- stan_model(model_code = zinck_code)
+    
+set.seed(1)
+    
+fit_zinck <- vb(
+stan.model,
+data = zinck_stan_data,
+algorithm = "meanfield",
+importance_resampling = TRUE,
+iter = 10000,
+tol_rel_obj = 0.01,
+elbo_samples = 500
+)
+beta <- fit_zinck@sim[["est"]][["beta"]]
+theta <- fit_zinck@sim[["est"]][["theta"]]
+    
+X_tilde <- generateKnockoff(X,theta,beta,seed=1)
+index <- 1:30 ## Index set of the true non-zero signals
+################### Varying the target FDR thresholds #########################
+############## FDR = 0.05 ###############
+index_est <- zinck.filter(X,X_tilde,Y,model="Random Forest",fdr=0.05)
+FN <- sum(index %in% index_est == FALSE) 
+FP <- sum(index_est %in% index == FALSE)
+TP <- sum(index_est %in% index == TRUE)
+    
+fdr1_LN_cts_list[i] <- FP/(FP+TP)
+power1_LN_cts_list[i] <- TP/(TP+FN)
+    
+############### FDR = 0.1 ################
+index_est <- zinck.filter(X,X_tilde,Y,model="Random Forest",fdr=0.1)
+FN <- sum(index %in% index_est == FALSE) 
+FP <- sum(index_est %in% index == FALSE)
+TP <- sum(index_est %in% index == TRUE)
+    
+fdr2_LN_cts_list[i] <- FP/(FP+TP)
+power2_LN_cts_list[i] <- TP/(TP+FN)
+    
+################ FDR = 0.15 ###############
+index_est <- zinck.filter(X,X_tilde,Y,model="Random Forest",fdr=0.15)
+FN <- sum(index %in% index_est == FALSE) 
+FP <- sum(index_est %in% index == FALSE)
+TP <- sum(index_est %in% index == TRUE)
+    
+fdr3_LN_cts_list[i] <- FP/(FP+TP)
+power3_LN_cts_list[i] <- TP/(TP+FN)
+    
+################ FDR = 0.2 ################
+index_est <- zinck.filter(X,X_tilde,Y,model="Random Forest",fdr=0.2)
+FN <- sum(index %in% index_est == FALSE) 
+FP <- sum(index_est %in% index == FALSE)
+TP <- sum(index_est %in% index == TRUE)
+    
+fdr4_LN_cts_list[i] <- FP/(FP+TP)
+power4_LN_cts_list[i] <- TP/(TP+FN)
+
+########## Generating binary response ############
+set.seed(1)
+signals = (2 * rbinom(30, 1, 0.5) - 1) * runif(30, 3, 10)
+kBeta = c(signals / sqrt(col_abundances[1:30]), rep(0, p - 30))
+pr = 1/(1+exp(-(Pi^2 %*% (kBeta/2) + Pi %*% kBeta)))
+Y_bin = rbinom(n,1,pr)
+
+################### Varying the target FDR thresholds #########################
+############## FDR = 0.05 ###############
+index_est <- zinck.filter(X,X_tilde,as.factor(Y_bin),model="Random Forest",fdr=0.05)
+FN <- sum(index %in% index_est == FALSE) 
+FP <- sum(index_est %in% index == FALSE)
+TP <- sum(index_est %in% index == TRUE)
+    
+fdr1_LN_bin_list[i] <- FP/(FP+TP)
+power1_LN_bin_list[i] <- TP/(TP+FN)
+    
+############### FDR = 0.1 ################
+index_est <- zinck.filter(X,X_tilde,as.factor(Y_bin),model="Random Forest",fdr=0.1)
+FN <- sum(index %in% index_est == FALSE) 
+FP <- sum(index_est %in% index == FALSE)
+TP <- sum(index_est %in% index == TRUE)
+    
+fdr2_LN_bin_list[i] <- FP/(FP+TP)
+power2_LN_bin_list[i] <- TP/(TP+FN)
+    
+################ FDR = 0.15 ###############
+index_est <- zinck.filter(X,X_tilde,as.factor(Y_bin),model="Random Forest",fdr=0.15)
+FN <- sum(index %in% index_est == FALSE) 
+FP <- sum(index_est %in% index == FALSE)
+TP <- sum(index_est %in% index == TRUE)
+    
+fdr3_LN_bin_list[i] <- FP/(FP+TP)
+power3_LN_bin_list[i] <- TP/(TP+FN)
+    
+################ FDR = 0.2 ################
+index_est <- zinck.filter(X,X_tilde,as.factor(Y_bin),model="Random Forest",fdr=0.2)
+FN <- sum(index %in% index_est == FALSE) 
+FP <- sum(index_est %in% index == FALSE)
+TP <- sum(index_est %in% index == TRUE)
+    
+fdr4_LN_bin_list[i] <- FP/(FP+TP)
+power4_LN_bin_list[i] <- TP/(TP+FN)
+}
+
 ########## Mean Empirical FDRs for different thresholds #############
-print(mean(fdr1_DM_list)) 
-print(mean(fdr1_LN_list)) 
-print(mean(fdr2_DM_list)) 
-print(mean(fdr2_LN_list)) 
-print(mean(fdr3_DM_list)) 
-print(mean(fdr3_LN_list)) 
-print(mean(fdr4_DM_list)) 
-print(mean(fdr4_LN_list)) 
+print(mean(fdr1_DM_cts_list)) 
+print(mean(fdr1_LN_cts_list)) 
+print(mean(fdr1_DM_bin_list)) 
+print(mean(fdr1_LN_bin_list)) 
+print(mean(fdr2_DM_cts_list)) 
+print(mean(fdr2_LN_cts_list)) 
+print(mean(fdr2_DM_bin_list)) 
+print(mean(fdr2_LN_bin_list)) 
+print(mean(fdr3_DM_cts_list)) 
+print(mean(fdr3_LN_cts_list)) 
+print(mean(fdr3_DM_bin_list)) 
+print(mean(fdr3_LN_bin_list)) 
+print(mean(fdr4_DM_cts_list)) 
+print(mean(fdr4_LN_cts_list)) 
+print(mean(fdr4_DM_bin_list)) 
+print(mean(fdr4_LN_bin_list)) 
 
 ########## Mean detection powers for different thresholds #############
-print(mean(power1_DM_list)) 
-print(mean(power1_LN_list)) 
-print(mean(power2_DM_list)) 
-print(mean(power2_LN_list)) 
-print(mean(power3_DM_list)) 
-print(mean(power3_LN_list)) 
-print(mean(power4_DM_list)) 
-print(mean(power4_LN_list)) 
+print(mean(power1_DM_cts_list)) 
+print(mean(power1_LN_cts_list)) 
+print(mean(power1_DM_bin_list)) 
+print(mean(power1_LN_bin_list)) 
+print(mean(power2_DM_cts_list)) 
+print(mean(power2_LN_cts_list)) 
+print(mean(power2_DM_bin_list)) 
+print(mean(power2_LN_bin_list)) 
+print(mean(power3_DM_cts_list)) 
+print(mean(power3_LN_cts_list)) 
+print(mean(power3_DM_bin_list)) 
+print(mean(power3_LN_bin_list)) 
+print(mean(power4_DM_cts_list)) 
+print(mean(power4_LN_cts_list)) 
+print(mean(power4_DM_bin_list)) 
+print(mean(power4_LN_bin_list)) 
 
 ########################################### Comparing other methods ########################################################
 ############################################################################################################################
@@ -424,6 +533,7 @@ print(mean(power4_LN_list))
 ######################## Fitting MX-KF ##########################
 
 ##### For both DM & LN generation ######
+W <- log_normalize(X)
 set.seed(1)
 kfp = knockoff.filter(X=W,y=Y,fdr = FDR,statistic = stat.glmnet_lambdasmax,offset=0) ## Change FDR accordingly!
 kfStat = kfp$statistic
