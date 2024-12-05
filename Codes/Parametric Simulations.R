@@ -169,32 +169,35 @@ comm <- matrix(0, n , length(g.est))
 rownames(comm) <- 1:nrow(comm)
 colnames(comm) <- names(g.est)
 comm.p <- comm   # comm.p hold the underlying proportions
-nSeq <- rnbinom(n , mu = 10000, size = 25)
+nSeq <- rnbinom(n , mu = 25000, size = 25)
 for (i in 1:n ) {
     comm.p[i, ] <- rdirichlet(1, g.est)[1, ]
     comm[i, ] <- rmultinom(1, nSeq[i], prob=comm.p[i, ])[, 1]
 }
 colindex=order(p.est, decreasing = T)[1:p]
 X = comm[,colindex]
+Pi = comm.p[,colindex]
+rowPi = rowSums(Pi)
+Pi = sweep(Pi, 1, rowPi, "/")
 #W = log_normalize(X)
 ##### Generating continuous responses ######
-rowX = rowSums(X)
-Pi = sweep(X, 1, rowX, "/")
+# rowX = rowSums(X)
+# Pi = sweep(X, 1, rowX, "/")
 col_abundances = colMeans(Pi)
 set.seed(1)
 signals = (2 * rbinom(30, 1, 0.5) - 1) * runif(30, 1.5, 3)
 kBeta = c(signals / sqrt(col_abundances[1:30]), rep(0, p - 30))
 eps=rnorm(n,mean = 0, sd=1)
 Y <- Pi^2 %*% (kBeta/2) + Pi %*% kBeta + eps
-X <- matrix(0, nrow = nrow(Pi), ncol = ncol(Pi))
+# X <- matrix(0, nrow = nrow(Pi), ncol = ncol(Pi))
  
-# Loop over each row to generate the new counts based on the multinomial distribution
+# # Loop over each row to generate the new counts based on the multinomial distribution
  
-nSeq = 25000
-set.seed(1)
-for (i in 1:nrow(Pi)) {
-  X[i, ] <- rmultinom(1, size = nSeq, prob = Pi[i, ])
-}
+# nSeq = 25000
+# set.seed(1)
+# for (i in 1:nrow(Pi)) {
+#   X[i, ] <- rmultinom(1, size = nSeq, prob = Pi[i, ])
+# }
  
 colnames(X) <- colnames(Pi)
 rownames(X) <- rownames(Pi)
