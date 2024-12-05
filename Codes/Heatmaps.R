@@ -8,7 +8,11 @@ library(topicmodels)
 library(ggplot2)
 
 load("count.RData") ## Loading the CRC species level data from the zinck package
-dcount <- count[,order(decreasing=T,colSums(count,na.rm=T),apply(count,2L,paste,collapse=''))][,1:300] ## Ordering the columns w/ decreasing abundance
+norm_count <- count/rowSums(count)
+col_means <- colMeans(norm_count > 0)
+indices <- which(col_means > 0.2)
+sorted_indices <- indices[order(col_means[indices], decreasing=TRUE)]
+dcount <- count[,sorted_indices][,1:400]
 
 set.seed(123) 
 selected_rows <- sample(1:nrow(dcount), 20)     ## Randomly select 20 subjects
