@@ -92,7 +92,7 @@ generate_data <- function(p,seed){
   sorted_indices <- indices[order(col_means[indices], decreasing=TRUE)]
    if(p %in% c(100,200,300,400)){
      dcount <- count[,sorted_indices][,1:p]
-     sel_index <- sort(sample(1:nrow(dcount), 250))
+     sel_index <- sort(sample(1:nrow(dcount), 500))
      dcount <- dcount[sel_index,]
      original_OTU <- dcount + 0.5
      seq_depths <- rowSums(original_OTU)
