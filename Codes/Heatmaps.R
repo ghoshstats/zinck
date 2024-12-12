@@ -145,7 +145,7 @@ fit <- vb(stan.model, data=zinLDA_stan_data, algorithm="meanfield", iter=10000)
 theta <- fit@sim[["est"]][["theta"]]
 beta <- fit@sim[["est"]][["beta"]]
 
-X_tilde.zinck <- zinck::generateKnockoff(X,theta,new_beta,seed=2) ### Knockoff copy of X 
+X_tilde.zinck <- zinck::generateKnockoff(X,theta,beta,seed=2) ### Knockoff copy of X 
 
 ############# Model-X Knockoffs ##################
 ##################################################
