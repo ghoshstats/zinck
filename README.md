@@ -123,70 +123,82 @@ After installation, you can verify and get a feel for the package's capabilities
 # Load the dataset
 load(data/count.Rdata)
 
-# Ordering the columns by decreasing abundance
-dcount <- count[, order(decreasing = TRUE, colSums(count, na.rm = TRUE), apply(count, 2L, paste, collapse = ''))][, 1:300]
-
-# Random Subject Selection
-set.seed(1)
-sel_index <- rbinom(nrow(dcount), size = 1, prob = 0.5)
-selected_samples <- which(sel_index == 1)
-X <- dcount[selected_samples, ]
-
-# Prepare signals so that each block sums up to zero
-Five1 <- c(-3,3,2.5,-1,-1.5)
-Five2 <- c(3,3,-2,-2,-2)
-Five3 <- c(1,-1,3,-2,-1)
-Five4 <- c(-1,1,2,-1,-1)
-Five5 <- c(3,3,-3,-2,-1)
-Five6 <- c(-1,1,-2,1,1)
-Five_all <- c(Five1,Five2,Five3,Five4,Five5,Five6)
-randBeta <- rep(0,300)
-
-set.seed(1)
-rand_indices <- sample(1:200,size=30,replace=FALSE) # Randomly Injecting the signals among the first 200 most abundant species
-
-set.seed(1)
-randBeta[rand_indices] <- sample(Five_all, size=30, replace=FALSE) # Randomly assigning each signal amplitude to these indices
-
-
-
-# Generate response
-n = nrow(X)
-p = ncol(X)
-W <- log_normalize(X)
-set.seed(1)
-eps = rnorm(n, mean = 0, sd = 1)
-Y <- W %*% randBeta + eps # Generate Y using a log-contrast model
-
-# Fit the zinck model
-species_fit <- fit.zinck(X, num_clusters = 6, method = "ADVI", seed = 123, alpha_param = 0.1)
-
-# Extract model parameters
-theta <- species_fit$theta
-beta <- species_fit$beta
-
-# Generate knockoff features
-X_tilde <- generateKnockoff(X, theta, beta, seed = 1)
-W_tilde <- log_normalize(X_tilde)
-
-# Perform variable selection
-selected_species <- zinck.filter(W, W_tilde, Y, model = "glmnet", fdr = 0.1, offset = 1)
-
-
-index <- rand_indices
-index_est <- selected_species
-neg_index <- (1:p)[-c(index)]
-if(length(index_est) == 0) {
-  neg_index_est <- 1:p
-} else {
-  neg_index_est <- (1:p)[-c(index_est)]
+# Simulation Design
+generate_data <- function(p,seed){
+  dcount <- count[,order(decreasing=T,colSums(count,na.rm=T),apply(count,2L,paste,collapse=''))] ## ordering the columns w/ decreasing abundance
+  ####### Randomly sampling patients from 574 observations #######
+  set.seed(seed)
+  norm_count <- count/rowSums(count)
+  col_means <- colMeans(norm_count > 0)
+  indices <- which(col_means > 0.2)
+  sorted_indices <- indices[order(col_means[indices], decreasing=TRUE)]
+  if(p %in% c(100,200,300,400)){
+    dcount <- count[,sorted_indices][,1:p]
+    sel_index <- sort(sample(1:nrow(dcount), 500))
+    dcount <- dcount[sel_index,]
+    original_OTU <- dcount + 0.5
+    seq_depths <- rowSums(original_OTU)
+    Pi = sweep(original_OTU, 1, seq_depths, "/")
+    n = nrow(Pi)
+    
+    col_abundances = colMeans(Pi)
+    
+    ##### Generating continuous responses ######
+    set.seed(1)
+    signals = (2 * rbinom(30, 1, 0.5) - 1) * runif(30, 1.5, 3)
+    kBeta = c(signals / sqrt(col_abundances[1:30]), rep(0, p - 30))
+    eps=rnorm(n,mean = 0, sd=1)
+    Y <- Pi^2 %*% (kBeta/2) + Pi %*% kBeta + eps
+    
+    ##### Generating binary responses #####
+    set.seed(1)
+    signals = (2 * rbinom(30, 1, 0.5) - 1) * runif(30, 3, 10)
+    kBeta = c(signals / sqrt(col_abundances[1:30]), rep(0, p - 30))
+    pr = 1/(1+exp(-(Pi^2 %*% (kBeta/2) + Pi %*% kBeta)))
+    Y_bin = rbinom(n,1,pr)
+    
+    ######### Generate a copy of X #########
+    X <- matrix(0, nrow = nrow(Pi), ncol = ncol(Pi))
+    nSeq <- seq_depths
+    # Loop over each row to generate the new counts based on the multinomial distribution
+    
+    set.seed(1)
+    
+    for (i in 1:nrow(Pi)) {
+      X[i, ] <- rmultinom(1, size = nSeq, prob = Pi[i, ])
+    }  
+  } else if (p %in% c(200,300,400)) {
+    print("Enter p within 100 to 400")
+  }
+  colnames(X) <- colnames(Pi)
+  return(list(Y = Y, X = X, Y_bin = Y_bin, index = 1:30))
 }
 
+ntaxa = 100 # Change to p = 200, 300, 400 accordingly.
+
+X <- generate_data(p=ntaxa, seed=1)$X
+Y1 <- generate_data(p=ntaxa, seed=1)$Y
+
+# Fit the zinck model
+fit <- fit.zinck(X,num_clusters = 15,method="ADVI",tuned =FALSE,seed=12)
+
+# Extract model parameters
+beta <- fit[["beta"]]
+theta <- fit[["theta"]]
+
+# Generate knockoff features
+X_tilde <- zinck::generateKnockoff(X,theta,beta,seed=1) ## getting the knockoff copy
+
+# Perform variable selection
+index_est <- suppressWarnings(zinck.filter(X,X_tilde,Y1,model="Random Forest",fdr=0.2,offset=0,mtry=200,seed=12,rftuning = TRUE))
+
+
+index <- 1:30
+
 # Evaluating model performance
-TP <- sum(selected_species %in% rand_indices) # True Positives
-FP <- sum(!selected_species %in% rand_indices) # False Positives
-TN <- sum(!neg_index_est %in% rand_indices) # True Negatives
-FN <- length(rand_indices) - TP # False Negatives
+TP <- sum(index_est %in% index) # True Positives
+FP <- sum(!index_est %in% index) # False Positives
+FN <- length(index) - TP # False Negatives
 
 estimated_FDR <- FP / (FP + TP) # Evaluating the empirical False Discovery Rate
 estimated_power <- TP / (TP + FN) # Evaluating the empirical Power or TPR
