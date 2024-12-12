@@ -40,19 +40,112 @@ draw.heatmap <- function(X, title="") {         ## Function to generate heatmaps
 ################# Zinck ########################
 ################################################
 
-zinck_fit <- zinLDA::zinLDA(X, K = 9, alpha = 0.1, pi = 0.75, a = .5, b = 10)  ## Fitting the zinck model
-posteriorEsts = zinLDA::posterior(zinck_fit)
-theta <- posteriorEsts$theta  
-beta <- posteriorEsts$beta   
-full_col_names <- colnames(OTU)
-### Padding zero columns so that the knockoff copy has same number of columns as X ###
-new_beta <- matrix(0, nrow=9, ncol=30)
-colnames(new_beta) <- full_col_names
-for (col in colnames(beta)) {
-  new_beta[,col] <- beta[,col]
+# zinck_fit <- zinLDA::zinLDA(X, K = 9, alpha = 0.1, pi = 0.75, a = .5, b = 10)  ## Fitting the zinck model
+# posteriorEsts = zinLDA::posterior(zinck_fit)
+# theta <- posteriorEsts$theta  
+# beta <- posteriorEsts$beta   
+# full_col_names <- colnames(OTU)
+# ### Padding zero columns so that the knockoff copy has same number of columns as X ###
+# new_beta <- matrix(0, nrow=9, ncol=30)
+# colnames(new_beta) <- full_col_names
+# for (col in colnames(beta)) {
+#   new_beta[,col] <- beta[,col]
+# }
+zinck_code <- "data {
+  int<lower=1> K; // num topics
+  int<lower=1> V; // num words
+  int<lower=0> D; // num docs
+  int<lower=0> n[D, V]; // word counts for each doc
+
+  // hyperparameters
+  vector<lower=0, upper=1>[V] delta;
 }
 
-X_tilde.zinck <- zinck::generateKnockoff(X,theta,new_beta,seed=1) ### Knockoff copy of X 
+parameters {
+  simplex[K] theta[D]; // topic mixtures
+  vector<lower=0, upper=1>[V] zeta[K]; // zero-inflated betas
+  vector<lower=0>[V] gamma1[K];
+  vector<lower=0>[V] gamma2[K];
+  vector<lower=0>[K] alpha;
+}
+
+transformed parameters {
+  vector[V] beta[K];
+
+  // Efficiently compute beta using vectorized operations
+  for (k in 1:K) {
+    vector[V] cum_log1m;
+    cum_log1m[1:(V - 1)] = cumulative_sum(log1m(zeta[k, 1:(V - 1)]));
+    cum_log1m[V] = 0;
+    beta[k] = zeta[k] .* exp(cum_log1m);
+    beta[k] = beta[k] / sum(beta[k]);
+  }
+}
+
+
+model {
+  for (k in 1:K) {
+    alpha[k] ~ gamma(100,100);  // Change these hyperparameters as needed
+  }
+  for (d in 1:D) {
+    theta[d] ~ dirichlet(alpha);
+  }
+  for (k in 1:K) {
+    for (m in 1:V) {
+        gamma1[k,m] ~ gamma(1,1);
+        gamma2[k,m] ~ gamma(1,1);
+    }
+  }
+
+  // Zero-inflated beta likelihood and data likelihood
+  for (k in 1:K) {
+    for (m in 1:V) {
+      real lp_non_zero = bernoulli_lpmf(0 | delta[m]) + beta_lpdf(zeta[k, m] | gamma1[k, m], gamma2[k, m]);
+      real lp_zero = bernoulli_lpmf(1 | delta[m]);
+      target += log_sum_exp(lp_non_zero, lp_zero);
+    }
+  }
+
+  // Compute the eta values and data likelihood more efficiently
+  for (d in 1:D) {
+    vector[V] eta = theta[d, 1] * beta[1];
+    for (k in 2:K) {
+      eta += theta[d, k] * beta[k];
+    }
+    eta = eta / sum(eta);
+    n[d] ~ multinomial(eta);
+  }
+}
+"
+dlt <- rep(0,ncol(X)) ## Initializing deltas with the individual column sparsities
+for(t in (1:ncol(X)))
+{
+  dlt[t] <- 1-mean(X[,t]>0)
+  if(dlt[t]==0)
+  {
+    dlt[t] = dlt[t]+0.01
+  }
+  if (dlt[t]==1)
+  {
+    dlt[t] = dlt[t]-0.01
+  }
+}
+
+zinLDA_stan_data <- list(
+  K = 13,
+  V = ncol(X),
+  D = nrow(X),
+  n = X,
+  delta = dlt
+)
+
+stan.model = stan_model(model_code = zinck_code)
+set.seed(2) ## Set seeds carefully since vb is sensitive to starting points. If there is an error for iteration i switch to seed = 11 ##
+fit <- vb(stan.model, data=zinLDA_stan_data, algorithm="meanfield", iter=10000)
+theta <- fit@sim[["est"]][["theta"]]
+beta <- fit@sim[["est"]][["beta"]]
+
+X_tilde.zinck <- zinck::generateKnockoff(X,theta,new_beta,seed=2) ### Knockoff copy of X 
 
 ############# Model-X Knockoffs ##################
 ##################################################
