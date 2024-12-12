@@ -5,6 +5,8 @@
 
 <img src="Zinck-flow-chart.png" style="width:100.0%" />
 
+**Visit the [Zinck Website](https://ghoshstats.github.io/zinck-website/) for some reproducible analyses from our paper and to explore its workflow!**
+
 # Installation Guide for `zinck`
 
 ## System Requirements
