@@ -16,7 +16,7 @@ library(reshape2)
 
 load("DirMultOutput.RData")
 
-n = 250
+n = 500
 p = 100 ## Change to 200, 300, 400
 #niter = 100
 #################### Stan code for zinck ####################
@@ -538,7 +538,7 @@ print(mean(power4_LN_bin_list))
 ##### For both DM & LN generation ######
 W <- log_normalize(X)
 set.seed(1)
-kfp = knockoff.filter(X=W,y=Y,fdr = FDR,statistic = stat.glmnet_lambdasmax,offset=0) ## Change FDR accordingly!
+kfp = knockoff.filter(X=W,y=Y,fdr = FDR,statistic = stat.random_forest,offset=0) ## Change FDR accordingly!
 kfStat = kfp$statistic
 t = knockoff.threshold(kfStat, fdr = FDR,offset=1)
 kfSelect = sort(which(kfStat >= t))
@@ -555,7 +555,7 @@ beta.LDA <- vanilla.LDA@beta
 beta.LDA <- t(apply(beta.LDA,1,function(row) row/sum(row)))
 X_tilde <- zinck::generateKnockoff(X,theta.LDA,beta.LDA,seed=1) ## Generating vanilla LDA knockoff copy
 W_tilde <- log_normalize(X_tilde) ## Making the knockoff copy compositional
-W <- stat.lasso_coefdiff(W,W_tilde,Y)
+W <- stat.random_forest(W,W_tilde,Y)
 T <- knockoff.threshold(W,fdr=FDR,offset=1) ## Vary FDR accordingly!
 index_est <- which(W>=T) 
 
