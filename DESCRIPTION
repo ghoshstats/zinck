@@ -46,10 +46,9 @@ Imports:
 Suggests:
     knitr,
     rmarkdown
-VignetteBuilder: knitr
 LazyData: true
 NeedsCompilation: no
-Packaged: 2024-06-17 15:42:41 UTC; Patron
+Packaged: 2024-06-19 14:27:38 UTC; Patron
 Author: Soham Ghosh [aut, cre],
   Zhengzheng Tang [ctb],
   Guanhua Chen [ctb]
