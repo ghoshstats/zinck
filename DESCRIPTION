@@ -46,6 +46,7 @@ Imports:
 Suggests:
     knitr,
     rmarkdown
+VignetteBuilder: knitr
 LazyData: true
 NeedsCompilation: no
 Packaged: 2024-06-19 14:27:38 UTC; Patron
