@@ -9,14 +9,17 @@
 #' @param seed Numeric; the seed for reproducibility.
 #' @param ntrees Numeric; the number of trees for Random Forest. Default is 1000.
 #' @param tune_mtry Logical; whether to tune mtry in Random Forest. Default is FALSE.
+#' @param rftuning Logical; whether to fit a fast or a tuned implementation of a Random Forest. Default is FALSE.
 #' @param mtry Numeric; the number of variables randomly sampled as candidates at each split in Random Forest. Default is NULL (auto-tuned).
+#' @param conservative Logical; whether to use a conservative knockoff threshold or not. Default is FALSE.
+#' @param metric A string; the importance metric for the Random Forest, can be ("Accuracy" or "Gini"). Default is "Accuracy".
 #' @return A vector of selected variables at a target false discovery rate
 #' @importFrom knockoff knockoff.threshold
 #' @importFrom randomForest tuneRF randomForest importance
 #' @importFrom glmnet cv.glmnet glmnet
 #' @importFrom stats coef
 #' @export
-zinck.filter <- function(X, X_tilde, Y, model, fdr = 0.1, offset = 1, seed = NULL, ntrees = 1000, tune_mtry = FALSE, mtry = NULL) {
+zinck.filter <- function(X, X_tilde, Y, model, fdr = 0.1, offset = 1, seed = NULL, ntrees = 1000, tune_mtry = FALSE,  mtry = NULL, metric = NULL, rftuning = FALSE, conservative = FALSE) {
   # Check for input errors
   if (!is.matrix(X) || !is.matrix(X_tilde)) stop("X and X_tilde must be matrices.")
   if (ncol(X) != ncol(X_tilde)) stop("X and X_tilde must have the same number of columns.")
@@ -37,29 +40,78 @@ zinck.filter <- function(X, X_tilde, Y, model, fdr = 0.1, offset = 1, seed = NUL
     } else { # Continuous response
       W <- stat.lasso_coefdiff(X, X_tilde, Y)
     }
-    T <- knockoff.threshold(W, fdr = fdr, offset = offset)
+    if (conservative == FALSE){
+      T <- knockoff.threshold(W, fdr = fdr, offset = offset)
+    } else {
+      T = (1-fdr)*ko.sel(W, print = FALSE, method = "gaps")$threshold
+    }
     selected_glm <- sort(which(W >= T))
-    cat('\nSelected variables:\n')
-    print(selected_glm)
-    return(selected_glm)
+    out = list(selected = selected_glm,
+               W = W,
+               T = T)
+    return(out)
   } else if (model == "Random Forest") {
-    set.seed(seed)
+    if (rftuning == TRUE){
     if (is.null(mtry)) { # Tune mtry if not provided
       if (tune_mtry) {
-        bestmtry <- tuneRF(X_aug, Y, stepFactor = 1.5, improve = 1e-5, ntree = ntrees, trace = FALSE)
+        if (is.factor(Y) || length(unique(Y)) == 2) { # Binary response
+        set.seed(seed)
+        bestmtry <- tuneRF(X_aug, as.factor(Y), stepFactor = 1.5, improve = 1e-5, ntree = ntrees, trace = FALSE)
         mtry <- bestmtry[as.numeric(which.min(bestmtry[, "OOBError"])), 1]
-      } else {
+        } else{
+          set.seed(seed)
+          bestmtry <- tuneRF(X_aug,Y, stepFactor = 1.5, improve = 1e-5, ntree = ntrees, trace = FALSE)
+          mtry <- bestmtry[as.numeric(which.min(bestmtry[, "OOBError"])), 1]
+      }}
+      else {
         mtry <- floor(sqrt(ncol(X_aug))) # Default mtry
       }
     }
+    if (is.factor(Y) || length(unique(Y)) == 2) { # Binary response
     set.seed(seed)
-    model_rf <- randomForest(X_aug, Y, ntree = ntrees, mtry = mtry, importance = TRUE)
+    model_rf <- randomForest(X_aug, as.factor(Y), ntree = ntrees, mtry = mtry, importance = TRUE)
+    if (metric == "Accuracy"){
     cf <- importance(model_rf)[, 1]
+    } else if (metric == "Gini"){
+      cf <- importance(model_rf)[,3]
+    }
+    } else {
+      set.seed(seed)
+      model_rf <- randomForest(X_aug, Y, ntree = ntrees, mtry = mtry, importance = TRUE)
+      if (metric == "Accuracy"){
+        cf <- importance(model_rf)[, 1]
+      } else if (metric == "Gini"){
+        cf <- importance(model_rf)[,3]
+      }
+    }
     W <- abs(cf[1:ncol(X)]) - abs(cf[(ncol(X) + 1):ncol(X_aug)])
+    if (conservative == FALSE){
     T <- knockoff.threshold(W, fdr = fdr, offset = offset)
+    } else {
+      T = (1-fdr)*ko.sel(W, print = FALSE, method = "gaps")$threshold
+    }} else if (rftuning == FALSE){
+      if (is.factor(Y) || length(unique(Y)) == 2) { # Binary response
+        set.seed(seed)
+        W <- stat.random_forest(X,X_tilde,as.factor(Y))
+        if (conservative == FALSE){
+          T <- knockoff.threshold(W, fdr = fdr, offset = offset)
+        } else {
+          T = (1-fdr)*ko.sel(W, print = FALSE, method = "gaps")$threshold
+        }
+      } else{
+        set.seed(seed)
+        W <- stat.random_forest(X,X_tilde,Y)
+        if (conservative == FALSE){
+          T <- knockoff.threshold(W, fdr = fdr, offset = offset)
+        } else {
+          T = (1-fdr)*ko.sel(W, print = FALSE, method = "gaps")$threshold
+        }
+      }
+    }
     selected_rf <- sort(which(W >= T))
-    cat('\nSelected variables:\n')
-    print(selected_rf)
-    return(selected_rf)
+    out = list(selected = selected_rf,
+               W = W,
+               T = T)
+    return(out)
   }
 }
