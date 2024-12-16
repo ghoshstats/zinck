@@ -13,7 +13,11 @@ zinck.filter(
   offset = 1,
   seed = NULL,
   ntrees = 1000,
-  tune_mtry = FALSE
+  tune_mtry = FALSE,
+  mtry = NULL,
+  metric = NULL,
+  rftuning = FALSE,
+  conservative = FALSE
 )
 }
 \arguments{
@@ -34,6 +38,14 @@ zinck.filter(
 \item{ntrees}{Numeric; the number of trees for Random Forest. Default is 1000.}
 
 \item{tune_mtry}{Logical; whether to tune mtry in Random Forest. Default is FALSE.}
+
+\item{mtry}{Numeric; the number of variables randomly sampled as candidates at each split in Random Forest. Default is NULL (auto-tuned).}
+
+\item{metric}{A string; the importance metric for the Random Forest, can be ("Accuracy" or "Gini"). Default is "Accuracy".}
+
+\item{rftuning}{Logical; whether to fit a fast or a tuned implementation of a Random Forest. Default is FALSE.}
+
+\item{conservative}{Logical; whether to use a conservative knockoff threshold or not. Default is FALSE.}
 }
 \value{
 A vector of selected variables at a target false discovery rate

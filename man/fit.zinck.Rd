@@ -8,10 +8,11 @@ fit.zinck(
   X,
   num_clusters,
   method = c("ADVI", "Gibbs"),
-  tuned = FALSE,
   seed = NULL,
   init_values = NULL,
-  alpha_param = 0.1
+  alpha_param = 0.1,
+  boundary_correction = FALSE,
+  prior_ZIGD = FALSE
 )
 }
 \arguments{
@@ -21,13 +22,15 @@ fit.zinck(
 
 \item{method}{A character string, either "ADVI" or "Gibbs", specifying the method to fit the model.}
 
-\item{tuned}{A logical value. If TRUE and method is "ADVI", the model will be tuned; otherwise, it will use default parameters.}
-
 \item{seed}{An integer used to set the seed for reproducibility.}
 
 \item{init_values}{A list of initial values for the ADVI algorithm. This parameter is optional and should be used only with the ADVI method. If NULL, the algorithm uses default initialization.}
 
 \item{alpha_param}{A positive real. The symmetric smoothed Dirichlet parameter for the cluster distributions, default=0.1}
+
+\item{boundary_correction}{A logical value. If TRUE, it adds and subtracts small numbers so that the log-likelihood doesn't blow up at the boundary points 0 or 1, default = FALSE.}
+
+\item{prior_ZIGD}{A logical value. If TRUE and method is "ADVI", the model will impose Gamma priors on the ZIGD hyperparameters.}
 }
 \value{
 A list containing the posterior estimates of beta and theta.
