@@ -92,7 +92,7 @@ for(t in (1:ncol(X)))
   
 }
 
-zinLDA_stan_data <- list(
+zinck_stan_data <- list(
   K = 27,
   V = ncol(X),
   D = nrow(X),
@@ -102,7 +102,7 @@ zinLDA_stan_data <- list(
 
 ## Fitting the zinck model ##
 set.seed(1)
-fitIBD <- vb(stan.model, data=zinLDA_stan_data, algorithm="meanfield", importance_resampling=TRUE, iter=10000,tol_rel_obj=0.01,elbo_samples=500)
+fitIBD <- vb(stan.model, data=zinck_stan_data, algorithm="meanfield", importance_resampling=TRUE, iter=10000,tol_rel_obj=0.01,elbo_samples=500)
 
 theta <- fitIBD@sim[["est"]][["theta"]]
 beta <- fitIBD@sim[["est"]][["beta"]]
