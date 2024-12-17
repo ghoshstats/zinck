@@ -131,7 +131,7 @@ for(i in 1:100)
     dlt[t] <- 1-mean(X_train[,t]>0)
   }
    
-  zinLDA_stan_data <- list(
+  zinck_stan_data <- list(
     K = 15,
     V = ncol(X_train),
     D = nrow(X_train),
@@ -143,7 +143,7 @@ for(i in 1:100)
   )
 
   set.seed(12) ## Set seeds carefully since vb is sensitive to starting points. If there is an error for iteration i switch to seed = 11 ##
-  fitCRC_train <- vb(stan.model, data=zinLDA_stan_data, algorithm="meanfield", iter=10000)
+  fitCRC_train <- vb(stan.model, data=zinck_stan_data, algorithm="meanfield", iter=10000)
   theta <- fitCRC_train@sim[["est"]][["theta"]]
   beta <- fitCRC_train@sim[["est"]][["beta"]]
   X_tilde.zinck <- zinck::generateKnockoff(X_train,theta,beta,seed=1) ## getting the knockoff copy
@@ -472,7 +472,7 @@ for(t in (1:ncol(X_train)))
 
 }
 # 
-zinLDA_stan_data <- list(
+zinck_stan_data <- list(
   K = 18,
   V = ncol(X_train),
   D = nrow(X_train),
@@ -481,7 +481,7 @@ zinLDA_stan_data <- list(
 )
 
 set.seed(1) ## Very sensitive to initialization
-fitIBD_train <- vb(stan.model, data=zinLDA_stan_data, algorithm="meanfield", iter=10000)
+fitIBD_train <- vb(stan.model, data=zinck_stan_data, algorithm="meanfield", iter=10000)
 
 theta <- fitIBD_train@sim[["est"]][["theta"]]
 beta <- fitIBD_train@sim[["est"]][["beta"]]
