@@ -10,7 +10,9 @@
 #' @param boundary_correction A logical value. If TRUE, it adds and subtracts small numbers so that the log-likelihood doesn't blow up at the boundary points 0 or 1, default = FALSE.
 #' @param prior_ZIGD A logical value. If TRUE and method is "ADVI", the model will impose Gamma priors on the ZIGD hyperparameters.
 #' @param alpha_param A positive real. The symmetric smoothed Dirichlet parameter for the cluster distributions, default=0.1
-#'
+#' @param elbo_samples A positive integer. The number of samples for Monte Carlo estimate of ELBO (objective function), defaulting to 100. (ELBO stands for "the evidence lower bound".)name description
+#' @param importance_resampling	 Logical scalar (defaulting to FALSE) indicating whether to do importance resampling to adjust the draws at the optimum to be more like draws from the posterior distribution.
+#' 
 #' @references
 #' Kucukelbir, A., Tran, D., Ranganath, R., Gelman, A., and Blei, D. (2017).
 #' Automatic Differentiation Variational Inference.
@@ -37,7 +39,7 @@
 #'
 
 
-fit.zinck <- function(X, num_clusters, method = c("ADVI", "Gibbs"), seed=NULL, init_values=NULL, alpha_param = 0.1, boundary_correction = FALSE, prior_ZIGD = FALSE) {
+fit.zinck <- function(X, num_clusters, method = c("ADVI", "Gibbs"), seed=NULL, init_values=NULL, alpha_param = 0.1, boundary_correction = FALSE,importance_resampling=FALSE,elbo_samples=500, prior_ZIGD = FALSE) {
 
   # Check if X is a matrix
   if (!is.matrix(X)) {
@@ -153,10 +155,10 @@ fit.zinck <- function(X, num_clusters, method = c("ADVI", "Gibbs"), seed=NULL, i
     # Use init_values if provided
     if (!is.null(init_values)) {
       set.seed(seed)
-      fit_initial <- suppressWarnings(vb(init_stan.model, data=zinck_init_data,init=init_values, algorithm="meanfield", iter=10000))
+      fit_initial <- suppressWarnings(vb(init_stan.model, data=zinck_init_data,init=init_values, algorithm="meanfield", iter=10000,importance_resampling=importance_resampling,elbo_samples=elbo_samples ))
     } else {
       set.seed(seed)
-      fit_initial <- suppressWarnings(vb(init_stan.model, data=zinck_init_data, algorithm="meanfield", iter=10000))
+      fit_initial <- suppressWarnings(vb(init_stan.model, data=zinck_init_data, algorithm="meanfield", iter=10000,importance_resampling=importance_resampling,elbo_samples=elbo_samples))
       theta <- fit_initial@sim[["est"]][["theta"]]
       beta <- fit_initial@sim[["est"]][["beta"]]
       out = list(beta = beta,
@@ -234,10 +236,10 @@ model {
 default_stan.model = stan_model(model_code = default_zinck)
 if (!is.null(init_values)) {
   set.seed(seed)
-  fit_default <- suppressWarnings(vb(default_stan.model, data=zinck_default_data,init=init_values, algorithm="meanfield", iter=10000))
+  fit_default <- suppressWarnings(vb(default_stan.model, data=zinck_default_data,init=init_values, algorithm="meanfield", iter=10000,importance_resampling=importance_resampling,elbo_samples=elbo_samples))
 } else {
   set.seed(seed)
-  fit_default <- suppressWarnings(vb(default_stan.model, data=zinck_default_data, algorithm="meanfield", iter=10000))
+  fit_default <- suppressWarnings(vb(default_stan.model, data=zinck_default_data, algorithm="meanfield", iter=10000,importance_resampling=importance_resampling,elbo_samples=elbo_samples))
 }
 ###### Posterior Estimates of theta and beta ########
 
