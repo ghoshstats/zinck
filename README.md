@@ -182,7 +182,7 @@ X <- generate_data(p=ntaxa, seed=1)$X
 Y1 <- generate_data(p=ntaxa, seed=1)$Y
 
 # Fit the zinck model
-fit <- fit.zinck(X,num_clusters = 15,method="ADVI",tuned =FALSE,seed=12)
+fit <- fit.zinck(X,num_clusters = 15,method="ADVI",seed=12,elbo_samples = 100)
 
 # Extract model parameters
 beta <- fit[["beta"]]
@@ -192,7 +192,7 @@ theta <- fit[["theta"]]
 X_tilde <- zinck::generateKnockoff(X,theta,beta,seed=1) ## getting the knockoff copy
 
 # Perform variable selection
-index_est <- suppressWarnings(zinck.filter(X,X_tilde,Y1,model="Random Forest",fdr=0.2,offset=0,mtry=200,seed=12,rftuning = TRUE))
+index_est <- suppressWarnings(zinck.filter(X,X_tilde,Y1,model="Random Forest",fdr=0.2,offset=0,mtry=200,seed=12,metric = "Accuracy", rftuning = TRUE))
 
 
 index <- 1:30
