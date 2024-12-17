@@ -111,7 +111,7 @@ for(t in (1:ncol(X)))
   
 }
 
-zinLDA_stan_data <- list(
+zinck_stan_data <- list(
   K = 20,
   V = ncol(X),
   D = nrow(X),
@@ -122,7 +122,7 @@ zinLDA_stan_data <- list(
 stan.model = stan_model(model_code = zinck_code)
 
 set.seed(1)
-fitCRC <- vb(stan.model, data=zinLDA_stan_data, algorithm="meanfield", iter=10000) ## Fitting the zinck model
+fitCRC <- vb(stan.model, data=zinck_stan_data, algorithm="meanfield", iter=10000) ## Fitting the zinck model
 
 theta <- fitCRC@sim[["est"]][["theta"]]
 beta <- fitCRC@sim[["est"]][["beta"]]
