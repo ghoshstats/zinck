@@ -560,8 +560,127 @@ T <- knockoff.threshold(W,fdr=FDR,offset=1) ## Vary FDR accordingly!
 index_est <- which(W>=T) 
 
 
+#################### Fitting DeepLINK #########################
+
+```{python}
+import numpy as np
+import DeepLINK as dl
+import pandas as pd
+from PCp1_numFactors import PCp1 as PCp1
+import keras
+from keras.layers import Dense, Dropout
+from keras.models import Sequential
+from pairwise_connected_layer import PairwiseConnected
+from itertools import combinations
+from keras.callbacks import EarlyStopping
+import tensorflow as tf
+import random
+import numpy as np
+
+aut_epoch = 100 # number of autoencoder training epochs
+aut_loss = 'mean_squared_error' # loss function used in autoencoder training
+aut_verb = 0 # verbose level of autoencoder
+mlp_epoch = 100 # number of mlp training epochs
+mlp_loss = 'binary_crossentropy'
+#mlp_loss = 'mean_squared_error' # loss function used in mlp training
+dnn_loss = 'binary_crossentropy'
+dnn_verb = 0
+aut_met = 'relu'
+dnn_met = 'elu'
+mlp_verb = 0 # verbose level of mlp
+l1 = 0.001 # l1 regularization factor in mlp
+lr = 0.001 # learning rate for mlp training
+q = FDR
+		    
+X -= np.mean(X, axis=0)
+
+# Prevent division by zero: Replace zero std with 1 before dividing
+std_dev = np.std(X, axis=0, ddof=1)
+std_dev[std_dev == 0] = 1  # Avoid division by zero
+X /= std_dev
+
+# Normalize X1 while ensuring no division by zero in normalization
+norms = np.sqrt(np.sum(X ** 2, axis=0))
+norms[norms == 0] = 1  # Avoid division by zero
+X1 = X / norms
+r_hat = PCp1(X1, 15)
+
+############## Continuous Outcomes ############
+
+Xnew = dl.knockoff_construct(X1, r_hat, 'elu', aut_epoch, aut_loss, aut_verb)
+
+  # compute knockoff statistics
+
+p = Xnew.shape[1] // 2
+
+ # implement DeepPINK
+es = EarlyStopping(monitor='val_loss', patience=30, verbose=2)
+dp = Sequential()
+dp.add(PairwiseConnected(input_shape=(2 * p,)))
+dp.add(Dense(p, activation='elu', kernel_regularizer=keras.regularizers.l1(l1=l1)))
+dp.add(Dense(1, activation=None))
+dp.compile(loss=mlp_loss, optimizer=keras.optimizers.Adam(learning_rate=lr))
+dp.fit(Xnew, y, epochs=mlp_epoch, batch_size=32, verbose=mlp_verb, validation_split=0.1, callbacks=[es])
+
+ # calculate knockoff statistics W_j
+weights = dp.get_weights()
+w = weights[1] @ weights[3]
+w = w.reshape(p, )
+z = weights[0][:p]
+z_tilde = weights[0][p:]
+W = (w * z) ** 2 - (w * z_tilde) ** 2
+  # feature selection
+
+selected = dl.knockoff_select(W, q, ko_plus=False)
+selected_plus = dl.knockoff_select(W, q, ko_plus=True)
+```
+##################### Fitting CKF ####################
+
+#source("utilityFnCKF.R")  ## Obtained from the CKF software file
+#source("functionsCKF.R")
+library(knockoff)
+library(glmnet)
+library(MethylCapSig)
+library(energy)
+library(dirmult)
+library(gurobi)
+
+n0 = 100
+n1 = n - n0
+nScreen = 40
+
+W=X
+Z = log_normalize(W)
+noPsudeoCountW = W
+while(anotherZ == T){      
+relativeZ = Z
+### sample the sets
+sampleCol = sample(1:n, size = n0, replace = F)
+relativeZ0 = relativeZ[sampleCol,]
+relativeZ1 = relativeZ[-sampleCol,]
+Xscreen = X[sampleCol,]
+Yscreen = Y[sampleCol]
+X0 = Xscreen
+Y0 = Yscreen
+X1 = X[-sampleCol,]
+Y1 = Y[-sampleCol]
+W0 = W[sampleCol,]
+W1 = W[-sampleCol,]
+Z0dupe = sum(duplicated(t(relativeZ0)))
+Z1dupe = sum(duplicated(t(relativeZ1)))
+duplicates = Z0dupe+Z1dupe
+if(duplicates == 0){
+anotherZ = F
+}
+}
+########## MIO #########
+mioFit = screeningStep(relativeZ0, Y0, nScreen, n0 = n0, n1 = n1, 60*10)
+mioSel = mioFit[[1]]
+    
+##### MIO Fits ####
+mSelect = selectionStep(X,Y,X0,Y0,X1,Y1,W0,W1,mioSel,FDR)
+index_est <- mSelect[[1]]
 # For DeepLINK, please refer to the software written in Python 3.7.6 named DeepLINK publicly available in the GitHub repository : https://github.com/zifanzhu/DeepLINK
 # For CKF, please refer to the software published in the supplementary material of the paper: "Compositional knockoff filter for high-dimensional regression analysis of microbiome data" 
 # by Srinivasan et al. (2021)
 # Note that CKF requires a Gurobi license.
-              
