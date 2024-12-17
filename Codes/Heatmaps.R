@@ -118,7 +118,7 @@ for(t in (1:ncol(X)))
   }
 }
 
-zinLDA_stan_data <- list(
+zinck_stan_data <- list(
   K = 13,
   V = ncol(X),
   D = nrow(X),
@@ -128,7 +128,7 @@ zinLDA_stan_data <- list(
 
 stan.model = stan_model(model_code = zinck_code)
 set.seed(2) ## Set seeds carefully since vb is sensitive to starting points. If there is an error for iteration i switch to seed = 11 ##
-fit <- vb(stan.model, data=zinLDA_stan_data, algorithm="meanfield", iter=10000)
+fit <- vb(stan.model, data=zinck_stan_data, algorithm="meanfield", iter=10000)
 theta <- fit@sim[["est"]][["theta"]]
 beta <- fit@sim[["est"]][["beta"]]
 
