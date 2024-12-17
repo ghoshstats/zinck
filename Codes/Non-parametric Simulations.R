@@ -475,6 +475,7 @@ n1 = n - n0
 nScreen = 40
 
 W=X1
+Y=Y1
 Z = log_normalize(W)
 noPsudeoCountW = W
 while(anotherZ == T){      
