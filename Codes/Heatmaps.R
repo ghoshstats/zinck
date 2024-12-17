@@ -1,6 +1,5 @@
 ############################## Codes to generate heatmaps for Figure 1(a) #####################################
 ###############################################################################################################
-library(zinLDA)
 library(zinck)
 library(knockoff)
 library(rstan)
@@ -39,18 +38,6 @@ draw.heatmap <- function(X, title="") {         ## Function to generate heatmaps
 }
 ################# Zinck ########################
 ################################################
-
-# zinck_fit <- zinLDA::zinLDA(X, K = 9, alpha = 0.1, pi = 0.75, a = .5, b = 10)  ## Fitting the zinck model
-# posteriorEsts = zinLDA::posterior(zinck_fit)
-# theta <- posteriorEsts$theta  
-# beta <- posteriorEsts$beta   
-# full_col_names <- colnames(OTU)
-# ### Padding zero columns so that the knockoff copy has same number of columns as X ###
-# new_beta <- matrix(0, nrow=9, ncol=30)
-# colnames(new_beta) <- full_col_names
-# for (col in colnames(beta)) {
-#   new_beta[,col] <- beta[,col]
-# }
 zinck_code <- "data {
   int<lower=1> K; // num topics
   int<lower=1> V; // num words
