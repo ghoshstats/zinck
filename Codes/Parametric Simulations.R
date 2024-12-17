@@ -156,7 +156,7 @@ tree = throat.tree
 tree.dist = cophenetic(tree)
 otu.ids <- tree$tip.label
 
-for(i in 1:200)
+for(i in 1:500)
 {
 set.seed(i)
 p.est = dd$pi
@@ -620,7 +620,7 @@ dp.add(PairwiseConnected(input_shape=(2 * p,)))
 dp.add(Dense(p, activation='elu', kernel_regularizer=keras.regularizers.l1(l1=l1)))
 dp.add(Dense(1, activation=None))
 dp.compile(loss=mlp_loss, optimizer=keras.optimizers.Adam(learning_rate=lr))
-dp.fit(Xnew, y, epochs=mlp_epoch, batch_size=32, verbose=mlp_verb, validation_split=0.1, callbacks=[es])
+dp.fit(Xnew, Y, epochs=mlp_epoch, batch_size=32, verbose=mlp_verb, validation_split=0.1, callbacks=[es])
 
  # calculate knockoff statistics W_j
 weights = dp.get_weights()
@@ -633,16 +633,39 @@ W = (w * z) ** 2 - (w * z_tilde) ** 2
 
 selected = dl.knockoff_select(W, q, ko_plus=False)
 selected_plus = dl.knockoff_select(W, q, ko_plus=True)
+
+############## Binary Outcomes ################
+mlp_loss = 'binary_crossentropy'
+Xnew = dl.knockoff_construct(X, r_hat, 'relu', aut_epoch, aut_loss, aut_verb)
+  # compute knockoff statistics
+
+p = Xnew.shape[1] // 2
+
+ # implement DeepPINK
+es = EarlyStopping(monitor='val_loss', patience=30, verbose=2)
+dp = Sequential()
+dp.add(PairwiseConnected(input_shape=(2 * p,)))
+dp.add(Dense(p, activation='elu', kernel_regularizer=keras.regularizers.l1(l1=l1)))
+dp.add(Dense(1, activation='relu',
+                    kernel_regularizer=keras.regularizers.l1_l2(l1=0.001, l2=0.001)))
+dp.compile(loss=mlp_loss, optimizer=keras.optimizers.Adam(learning_rate=lr))
+dp.fit(Xnew, Y_bin, epochs=mlp_epoch, batch_size=32, verbose=mlp_verb, validation_split=0.1, callbacks=[es])
+
+ # calculate knockoff statistics W_j
+weights = dp.get_weights()
+w = weights[1] @ weights[3]
+w = w.reshape(p, )
+z = weights[0][:p]
+z_tilde = weights[0][p:]
+W = (w * z) ** 2 - (w * z_tilde) ** 2
+  # feature selection
+selected = dl.knockoff_select(W, q, ko_plus=False)
+selected_plus = dl.knockoff_select(W, q, ko_plus=True)
 ```
 ##################### Fitting CKF ####################
 
 #source("utilityFnCKF.R")  ## Obtained from the CKF software file
 #source("functionsCKF.R")
-library(knockoff)
-library(glmnet)
-library(MethylCapSig)
-library(energy)
-library(dirmult)
 library(gurobi)
 
 n0 = 100
