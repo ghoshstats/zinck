@@ -167,7 +167,7 @@ for(i in 1:niter)
     dlt[t] <- 1-mean(X1[,t]>0)
     }
 
-    zinLDA_stan_data <- list(
+    zinck_stan_data <- list(
     K = 15,
     V = ncol(X1),
     D = nrow(X1),
