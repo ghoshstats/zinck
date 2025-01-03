@@ -130,20 +130,16 @@ optimal_k <- function(X, kmin, kmax, seed_list = NULL)
           set.seed(seed_list[[i]])
  }
 
-        fit_zinck <- vb(
-          stan.model,
-          data = zinck_stan_data,
-          algorithm = "meanfield",
-          importance_resampling = TRUE,
-          iter = 10000,
-          tol_rel_obj = 0.01,
-          elbo_samples = 500
-        )
-      })
+    fit_zinck <- vb(
+      stan.model,
+      data = zinck_stan_data,
+      algorithm = "meanfield",
+      importance_resampling = TRUE,
+      iter = 10000,
+      tol_rel_obj = 0.01,
+      elbo_samples = 500
     )
-
-
-
+    
     # Extract cluster-term distributions
     beta <- fit_zinck@sim[["est"]][["beta"]]
 
