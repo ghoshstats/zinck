@@ -26,9 +26,10 @@ the average Jensen-Shannon Divergence for each, returning the number of clusters
 \examples{
 \dontrun{
 data("count.genus.RData")
-dcount <- count.genus[,order(decreasing=T,colSums(count.genus,na.rm=T), apply(count.genus,2L,paste,collapse=''))]
+dcount <- count.genus[,order(decreasing=T,colSums(count.genus,na.rm=T),apply(count.genus,2L,paste,collapse='')]
 X <- dcount
 result <- optimal_k(X, kmin=8, kmax=11, seed_list=list(1,11,1,1))
 print(result)
 }
+
 }
