@@ -126,63 +126,71 @@ After installation, you can verify and get a feel for the package's capabilities
 load(data/count.Rdata)
 
 # Simulation Design
-generate_data <- function(p,seed){
-  dcount <- count[,order(decreasing=T,colSums(count,na.rm=T),apply(count,2L,paste,collapse=''))] ## ordering the columns w/ decreasing abundance
-  ####### Randomly sampling patients from 574 observations #######
+generate_data <- function(p, seed) {
+  dcount <- count[, order(decreasing = TRUE, colSums(count, na.rm = TRUE), apply(count, 2L, paste, collapse = ''))] # Ordering the columns with decreasing abundance
+  
+  # Randomly sampling patients from 574 observations
   set.seed(seed)
-  norm_count <- count/rowSums(count)
+  norm_count <- count / rowSums(count)
   col_means <- colMeans(norm_count > 0)
   indices <- which(col_means > 0.2)
-  sorted_indices <- indices[order(col_means[indices], decreasing=TRUE)]
-  if(p %in% c(100,200,300,400)){
-    dcount <- count[,sorted_indices][,1:p]
+  sorted_indices <- indices[order(col_means[indices], decreasing = TRUE)]
+  
+  if (p %in% c(200, 300, 400)) {
+    dcount <- count[, sorted_indices][, 1:p]
     sel_index <- sort(sample(1:nrow(dcount), 500))
-    dcount <- dcount[sel_index,]
+    dcount <- dcount[sel_index, ]
     original_OTU <- dcount + 0.5
     seq_depths <- rowSums(original_OTU)
-    Pi = sweep(original_OTU, 1, seq_depths, "/")
-    n = nrow(Pi)
+    Pi <- sweep(original_OTU, 1, seq_depths, "/")
+    n <- nrow(Pi)
     
-    col_abundances = colMeans(Pi)
+    col_abundances <- colMeans(Pi)
     
     ##### Generating continuous responses ######
     set.seed(1)
-    signals = (2 * rbinom(30, 1, 0.5) - 1) * runif(30, 1.5, 3)
-    kBeta = c(signals / sqrt(col_abundances[1:30]), rep(0, p - 30))
-    eps=rnorm(n,mean = 0, sd=1)
-    Y <- Pi^2 %*% (kBeta/2) + Pi %*% kBeta + eps
+    signal_indices <- sample(1:min(p, 200), 30, replace = FALSE) # Randomly selecting 30 indices for signal injection
+    signals <- (2 * rbinom(30, 1, 0.5) - 1) * runif(30, 6, 12)
+    kBeta <- numeric(p)
+    kBeta[signal_indices] <- signals / sqrt(col_abundances[signal_indices])
+    
+    eps <- rnorm(n, mean = 0, sd = 1)
+    Y <- Pi^2 %*% (kBeta / 2) + Pi %*% kBeta + eps
     
     ##### Generating binary responses #####
     set.seed(1)
-    signals = (2 * rbinom(30, 1, 0.5) - 1) * runif(30, 3, 10)
-    kBeta = c(signals / sqrt(col_abundances[1:30]), rep(0, p - 30))
-    pr = 1/(1+exp(-(Pi^2 %*% (kBeta/2) + Pi %*% kBeta)))
-    Y_bin = rbinom(n,1,pr)
+    signals <- (2 * rbinom(30, 1, 0.5) - 1) * runif(30, 30, 50)
+    kBeta[signal_indices] <- signals / sqrt(col_abundances[signal_indices])
+    
+    pr <- 1 / (1 + exp(-(Pi^2 %*% (kBeta / 2) + Pi %*% kBeta)))
+    Y_bin <- rbinom(n, 1, pr)
     
     ######### Generate a copy of X #########
     X <- matrix(0, nrow = nrow(Pi), ncol = ncol(Pi))
     nSeq <- seq_depths
+    
     # Loop over each row to generate the new counts based on the multinomial distribution
-    
     set.seed(1)
-    
     for (i in 1:nrow(Pi)) {
-      X[i, ] <- rmultinom(1, size = nSeq, prob = Pi[i, ])
-    }  
-  } else if (p %in% c(200,300,400)) {
-    print("Enter p within 100 to 400")
+      X[i, ] <- rmultinom(1, size = nSeq[i], prob = Pi[i, ])
+    }
+    
+  } else {
+    print("Enter p within 200 to 400")
   }
+  
   colnames(X) <- colnames(Pi)
-  return(list(Y = Y, X = X, Y_bin = Y_bin, index = 1:30))
+  return(list(Y = Y, X = X, Y_bin = Y_bin, signal_indices = signal_indices))
 }
 
-ntaxa = 100 # Change to p = 200, 300, 400 accordingly.
+
+ntaxa = 200 # Change to p = 300, 400 accordingly.
 
 X <- generate_data(p=ntaxa, seed=1)$X
 Y1 <- generate_data(p=ntaxa, seed=1)$Y
 
 # Fit the zinck model
-fit <- fit.zinck(X,num_clusters = 15,method="ADVI",seed=12,elbo_samples = 100)
+fit <- fit.zinck(X,num_clusters = 18,method="ADVI",seed=1,boundary_correction = TRUE, prior_ZIGD = TRUE)
 
 # Extract model parameters
 beta <- fit[["beta"]]
@@ -192,10 +200,11 @@ theta <- fit[["theta"]]
 X_tilde <- zinck::generateKnockoff(X,theta,beta,seed=1) ## getting the knockoff copy
 
 # Perform variable selection
-index_est <- suppressWarnings(zinck.filter(X,X_tilde,Y1,model="Random Forest",fdr=0.2,offset=0,mtry=200,seed=12,metric = "Accuracy", rftuning = TRUE))
+cts_rf <- suppressWarnings(zinck.filter(X,X_tilde,Y1,model="Random Forest",fdr=0.2,ntrees=5000,offset=1,mtry=400,seed=15,metric = "Accuracy", rftuning = TRUE))
+index_est <- cts_rf[["selected"]]
 
 
-index <- 1:30
+index <- generate_data(p=ntaxa,seed=1)$signal_indices
 
 # Evaluating model performance
 TP <- sum(index_est %in% index) # True Positives
