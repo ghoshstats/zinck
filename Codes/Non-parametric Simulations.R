@@ -76,57 +76,64 @@ stan.model = stan_model(model_code = zinck_code)  ## Reading the stan model
 
 ######################################### Replicating the simulation setup ##########################################################
 
-generate_data <- function(p,seed){
-  dcount <- count[,order(decreasing=T,colSums(count,na.rm=T),apply(count,2L,paste,collapse=''))] ## ordering the columns w/ decreasing abundance
-  ####### Randomly sampling patients from 574 observations #######
+generate_data <- function(p, seed) {
+  dcount <- count[, order(decreasing = TRUE, colSums(count, na.rm = TRUE), apply(count, 2L, paste, collapse = ''))] # Ordering the columns with decreasing abundance
+  
+  # Randomly sampling patients from 574 observations
   set.seed(seed)
-  norm_count <- count/rowSums(count)
+  norm_count <- count / rowSums(count)
   col_means <- colMeans(norm_count > 0)
   indices <- which(col_means > 0.2)
-  sorted_indices <- indices[order(col_means[indices], decreasing=TRUE)]
-  if(p %in% c(100,200,300,400)){
-    dcount <- count[,sorted_indices][,1:p]
+  sorted_indices <- indices[order(col_means[indices], decreasing = TRUE)]
+  
+  if (p %in% c(200, 300, 400)) {
+    dcount <- count[, sorted_indices][, 1:p]
     sel_index <- sort(sample(1:nrow(dcount), 500))
-    dcount <- dcount[sel_index,]
+    dcount <- dcount[sel_index, ]
     original_OTU <- dcount + 0.5
     seq_depths <- rowSums(original_OTU)
-    Pi = sweep(original_OTU, 1, seq_depths, "/")
-    n = nrow(Pi)
+    Pi <- sweep(original_OTU, 1, seq_depths, "/")
+    n <- nrow(Pi)
     
-    col_abundances = colMeans(Pi)
+    col_abundances <- colMeans(Pi)
     
     ##### Generating continuous responses ######
     set.seed(1)
-    signals = (2 * rbinom(30, 1, 0.5) - 1) * runif(30, 1.5, 3)
-    kBeta = c(signals / sqrt(col_abundances[1:30]), rep(0, p - 30))
-    eps=rnorm(n,mean = 0, sd=1)
-    Y <- Pi^2 %*% (kBeta/2) + Pi %*% kBeta + eps
+    signal_indices <- sample(1:min(p, 200), 30, replace = FALSE) # Randomly selecting 30 indices for signal injection
+    signals <- (2 * rbinom(30, 1, 0.5) - 1) * runif(30, 6, 12)
+    kBeta <- numeric(p)
+    kBeta[signal_indices] <- signals / sqrt(col_abundances[signal_indices])
+    
+    eps <- rnorm(n, mean = 0, sd = 1)
+    Y <- Pi^2 %*% (kBeta / 2) + Pi %*% kBeta + eps
     
     ##### Generating binary responses #####
     set.seed(1)
-    signals = (2 * rbinom(30, 1, 0.5) - 1) * runif(30, 3, 10)
-    kBeta = c(signals / sqrt(col_abundances[1:30]), rep(0, p - 30))
-    pr = 1/(1+exp(-(Pi^2 %*% (kBeta/2) + Pi %*% kBeta)))
-    Y_bin = rbinom(n,1,pr)
+    signals <- (2 * rbinom(30, 1, 0.5) - 1) * runif(30, 30, 50)
+    kBeta[signal_indices] <- signals / sqrt(col_abundances[signal_indices])
+    
+    pr <- 1 / (1 + exp(-(Pi^2 %*% (kBeta / 2) + Pi %*% kBeta)))
+    Y_bin <- rbinom(n, 1, pr)
     
     ######### Generate a copy of X #########
     X <- matrix(0, nrow = nrow(Pi), ncol = ncol(Pi))
     nSeq <- seq_depths
+    
     # Loop over each row to generate the new counts based on the multinomial distribution
-    
     set.seed(1)
-    
     for (i in 1:nrow(Pi)) {
-      X[i, ] <- rmultinom(1, size = nSeq, prob = Pi[i, ])
-    }  
-  } else if (p %in% c(200,300,400)) {
-    print("Enter p within 100 to 400")
+      X[i, ] <- rmultinom(1, size = nSeq[i], prob = Pi[i, ])
+    }
+    
+  } else {
+    print("Enter p within 200 to 400")
   }
+  
   colnames(X) <- colnames(Pi)
-  return(list(Y = Y, X = X, Y_bin = Y_bin, index = 1:30))
+  return(list(Y = Y, X = X, Y_bin = Y_bin, signal_indices = signal_indices))
 }
 
-ntaxa = 100 # Change to p = 200, 300, 400 accordingly.
+ntaxa = 200 # Change to p = 300, 400 accordingly.
 
 ### Index 1 corresponds to FDR=0.05, 2 corresponds to FDR=0.1, 3 corresponds to FDR=0.15, and 4 corresponds to FDR=0.2 ###
 
@@ -162,47 +169,52 @@ for(i in 1:niter)
     ################################### Fitting the zinck model ################################################
     ####### Initializing Delta for ADVI ########
     
-   for(t in (1:ncol(X1)))
-    {
-    dlt[t] <- 1-mean(X1[,t]>0)
-    }
+   # for(t in (1:ncol(X1)))
+   #  {
+   #  dlt[t] <- 1-mean(X1[,t]>0)
+   #  }
 
-    zinck_stan_data <- list(
-    K = 15,
-    V = ncol(X1),
-    D = nrow(X1),
-    n = X1,
-    alpha = rep(0.1, 15),
-    gamma1 = rep(0.5, ncol(X1)),
-    gamma2 = rep(10,ncol(X1)),
-    delta = dlt
-    )
+   #  zinck_stan_data <- list(
+   #  K = 15,
+   #  V = ncol(X1),
+   #  D = nrow(X1),
+   #  n = X1,
+   #  alpha = rep(0.1, 15),
+   #  gamma1 = rep(0.5, ncol(X1)),
+   #  gamma2 = rep(10,ncol(X1)),
+   #  delta = dlt
+   #  )
     
-    set.seed(seed_list[i])
-    fit1 <- vb(
-      stan.model,
-      data = zinck_stan_data,
-      algorithm = "meanfield",
-      importance_resampling = TRUE,
-      iter = 10000,
-      tol_rel_obj = 0.01,
-      elbo_samples = 500
-    )
+   #  set.seed(seed_list[i])
+   #  fit1 <- vb(
+   #    stan.model,
+   #    data = zinck_stan_data,
+   #    algorithm = "meanfield",
+   #    importance_resampling = TRUE,
+   #    iter = 10000,
+   #    tol_rel_obj = 0.01,
+   #    elbo_samples = 500
+   #  )
     
-    theta <- fit1@sim[["est"]][["theta"]]
-    beta <- fit1@sim[["est"]][["beta"]]
+   #  theta <- fit1@sim[["est"]][["theta"]]
+   #  beta <- fit1@sim[["est"]][["beta"]]
     
-    X1_tilde <- generateKnockoff(X1,theta,beta,seed=1) ## Generating the knockoff copy
+   #  X1_tilde <- generateKnockoff(X1,theta,beta,seed=1) ## Generating the knockoff copy
+   fit1 <- fit.zinck(X1,num_clusters = 18,method="ADVI",seed=1,boundary_correction = TRUE, prior_ZIGD = TRUE)
+   theta <- fit$theta
+   beta <- fit$beta
+   X1_tilde <- zinck::generateKnockoff(X1,theta,beta,seed=1) ## getting the knockoff copy
+
   
     #############################################################################################################
-    index <- 1:30 ## Index set of the true non-zero signals
+    index <- generate_data(p=ntaxa,seed=i)$signal_indices ## Index set of the true non-zero signals
     
     ############################ Fitting the Random Forest models with Y against X and X_tilde ####################
     
     ################### Varying the target FDR thresholds #########################
 
     ############## FDR = 0.05 ###############
-    cts_rf <- suppressWarnings(zinck.filter(X1,X1_tilde,Y1,model="Random Forest",fdr=0.05,offset=0,mtry=200,seed=12,rftuning = TRUE))
+    cts_rf <- suppressWarnings(zinck.filter(X1,X1_tilde,Y1,model="Random Forest",fdr=0.05,ntrees=5000,offset=0,mtry=400,seed=15,metric = "Accuracy", rftuning = TRUE))
     index_est <- cts_rf[["selected"]]
     FN <- sum(index %in% index_est == FALSE) 
     FP <- sum(index_est %in% index == FALSE)
@@ -212,7 +224,7 @@ for(i in 1:niter)
     power1_cts_list[i] <- TP/(TP+FN)
     
     ############### FDR = 0.1 ################
-    cts_rf <- suppressWarnings(zinck.filter(X1,X1_tilde,Y1,model="Random Forest",fdr=0.1,offset=0,mtry=200,seed=12,rftuning = TRUE))
+    cts_rf <- suppressWarnings(zinck.filter(X1,X1_tilde,Y1,model="Random Forest",fdr=0.1,ntrees=5000,offset=1,mtry=400,seed=15,metric = "Accuracy", rftuning = TRUE))
     index_est <- cts_rf[["selected"]]    
     FN <- sum(index %in% index_est == FALSE) 
     FP <- sum(index_est %in% index == FALSE)
@@ -222,7 +234,7 @@ for(i in 1:niter)
     power2_cts_list[i] <- TP/(TP+FN)
     
     ################ FDR = 0.15 ###############
-    cts_rf <- suppressWarnings(zinck.filter(X1,X1_tilde,Y1,model="Random Forest",fdr=0.15,offset=0,mtry=200,seed=12,rftuning = TRUE))
+    cts_rf <- suppressWarnings(zinck.filter(X1,X1_tilde,Y1,model="Random Forest",fdr=0.15,ntrees=5000,offset=1,mtry=400,seed=15,metric = "Accuracy", rftuning = TRUE))
     index_est <- cts_rf[["selected"]]    
     FN <- sum(index %in% index_est == FALSE) 
     FP <- sum(index_est %in% index == FALSE)
@@ -232,7 +244,7 @@ for(i in 1:niter)
     power3_cts_list[i] <- TP/(TP+FN)
     
     ################ FDR = 0.2 ################
-    cts_rf <- suppressWarnings(zinck.filter(X1,X1_tilde,Y1,model="Random Forest",fdr=0.2,offset=0,mtry=200,seed=12,rftuning = TRUE))
+    cts_rf <- suppressWarnings(zinck.filter(X1,X1_tilde,Y1,model="Random Forest",fdr=0.2,ntrees=5000,offset=1,mtry=400,seed=15,metric = "Accuracy", rftuning = TRUE))
     index_est <- cts_rf[["selected"]]     
     FN <- sum(index %in% index_est == FALSE) 
     FP <- sum(index_est %in% index == FALSE)
@@ -246,7 +258,7 @@ for(i in 1:niter)
     
     Y1_bin <- generate_data(p = ntaxa, seed = i)$Y_bin
     ############## FDR = 0.05 ###############
-    bin_rf <- suppressWarnings(zinck.filter(X1,X1_tilde,as.factor(Y1_bin),model="Random Forest",fdr=0.05,offset=0,mtry=14,seed=15,rftuning = TRUE))
+    bin_rf <- suppressWarnings(zinck.filter(X1,X1_tilde,as.factor(Y1_bin),model="Random Forest",fdr=0.05,offset=0,mtry=45,seed=68,metric="Gini",rftuning = TRUE))
     index_est <- bin_rf[["selected"]]
     FN <- sum(index %in% index_est == FALSE) 
     FP <- sum(index_est %in% index == FALSE)
@@ -256,7 +268,7 @@ for(i in 1:niter)
     power1_bin_list[i] <- TP/(TP+FN)
     
     ############### FDR = 0.1 ################
-    bin_rf <- suppressWarnings(zinck.filter(X1,X1_tilde,as.factor(Y1_bin),model="Random Forest",fdr=0.1,offset=0,mtry=14,seed=15,rftuning = TRUE))
+    bin_rf <- suppressWarnings(zinck.filter(X1,X1_tilde,as.factor(Y1_bin),model="Random Forest",fdr=0.1,offset=0,mtry=45,seed=68,metric="Gini",rftuning = TRUE))
     index_est <- bin_rf[["selected"]]
     FN <- sum(index %in% index_est == FALSE) 
     FP <- sum(index_est %in% index == FALSE)
@@ -266,7 +278,7 @@ for(i in 1:niter)
     power2_bin_list[i] <- TP/(TP+FN)
     
     ################ FDR = 0.15 ###############
-    bin_rf <- suppressWarnings(zinck.filter(X1,X1_tilde,as.factor(Y1_bin),model="Random Forest",fdr=0.15,offset=0,mtry=14,seed=15,rftuning = TRUE))
+    bin_rf <- suppressWarnings(zinck.filter(X1,X1_tilde,as.factor(Y1_bin),model="Random Forest",fdr=0.15,offset=0,mtry=45,seed=68,metric="Gini",rftuning = TRUE))
     index_est <- bin_rf[["selected"]]
     FN <- sum(index %in% index_est == FALSE) 
     FP <- sum(index_est %in% index == FALSE)
@@ -276,7 +288,7 @@ for(i in 1:niter)
     power3_bin_list[i] <- TP/(TP+FN)
     
     ################ FDR = 0.2 ################
-    bin_rf <- suppressWarnings(zinck.filter(X1,X1_tilde,as.factor(Y1_bin),model="Random Forest",fdr=0.2,offset=0,mtry=14,seed=15,rftuning = TRUE))
+    bin_rf <- suppressWarnings(zinck.filter(X1,X1_tilde,as.factor(Y1_bin),model="Random Forest",fdr=0.2,offset=0,mtry=45,seed=68,metric="Gini",rftuning = TRUE))
     index_est <- bin_rf[["selected"]]
     FN <- sum(index %in% index_est == FALSE) 
     FP <- sum(index_est %in% index == FALSE)
@@ -321,16 +333,11 @@ print(mean(power4_bin_list))
 ##### For continuous outcomes ######
 W1 = log_normalize(X1)
 W1_tilde = create.second_order(W1)
-set.seed(3)
-imp <- stat.random_forest(W1,W1_tilde,Y1)
-T <- knockoff.threshold(imp,fdr=FDR)
-index_est <- which(imp >=T)
+set.seed(1)
+index_est <- zinck.filter(W1,W1_tilde,Y1,model="Random Forest",fdr=FDR,seed=4)$selected
 
 ##### For binary outcomes ######
-set.seed(21)
-imp <- stat.random_forest(W1,W1_tilde,as.factor(Y1_bin))
-T <- knockoff.threshold(imp,fdr=FDR)
-index_est <- which(imp >=T)
+index_est <- zinck.filter(W1,W1_tilde,as.factor(Y1_bin),model="Random Forest",fdr=FDR,seed=1)$selected
 
 ######################## Fitting LDA-KF ##########################
 
@@ -343,18 +350,10 @@ beta.LDA <- vanilla.LDA@beta
 beta.LDA <- t(apply(beta.LDA,1,function(row) row/sum(row)))
 X1_tilde.LDA <- zinck::generateKnockoff(X1,theta.LDA,beta.LDA,seed=1) ## Generating vanilla LDA knockoff copy
 
-set.seed(34)
-imp <- stat.random_forest(X1,X1_tilde.LDA,Y1)
-T <- knockoff.threshold(imp,fdr=FDR,offset=0)
-index_est <- which(imp>=T)
-
+index_est <- zinck.filter(X1,X1_tilde.LDA,Y1,model="Random Forest",fdr=FDR,offset=0,seed=2)$selected
 
 ##### For binary outcomes #####
-set.seed(34)
-imp <- stat.random_forest(X1,X1_tilde.LDA,as.factor(Y1_bin))
-T <- knockoff.threshold(imp,fdr=FDR,offset=0)
-index_est <- which(imp >=T)
-
+index_est <- zinck.filter(X1,X1_tilde.LDA,as.factor(Y1_bin),model="Random Forest",fdr=FDR,offset=1,seed=4,rftuning = TRUE,metric="Gini",mtry=67)$selected
 
  
 #################### Fitting DeepLINK #########################
