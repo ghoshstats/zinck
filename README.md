@@ -225,9 +225,9 @@ Codes used to replicate both simulation and real data analyses are in the folder
 
 There are two types of simulation studies: 
 
-(1) Non-parametric Simulations -- where the microbiome data generating process is unknown and involves subsetting from the CRC species level data (https://github.com/zellerlab/crc_meta), also saved in the repository as ``count.Rdata``. The number of taxa is varied from 100 to 400 for both continuous and binary outcome types. The empirical detection powers along with FDRs are recorded for a range of target FDR thresholds. The codes to replicate the analysis can be found in `Codes/Non-parametric Simulations.R`.
+(1) Non-parametric Simulations -- where the microbiome data generating process is unknown and involves subsetting from the CRC species level data (https://github.com/zellerlab/crc_meta), also saved in the repository as ``count.Rdata``. The number of taxa is varied from 200 to 400 for both continuous and binary outcome types. The empirical detection powers along with FDRs are recorded for a range of target FDR thresholds. The codes to replicate the analysis can be found in `Codes/Non-parametric Simulations.R`.
 
-(2) Parametric Simulations -- where the microbiome data generating process is known that is, either generated from a Dirichlet Multinomial (DM) setting or a Logistic Normal Multinomial (LNM) setting. The number of taxa is again varied from 100 to 400 and the empirical detection powers along with FDRs are recorded for a range of target FDR thresholds. The codes to replicate the analysis can be found in `Codes/Parametric Simulations.R`.
+(2) Parametric Simulations -- where the microbiome data generating process is known that is, either generated from a Dirichlet Multinomial (DM) setting or a Logistic Normal Multinomial (LNM) setting. The number of taxa is again varied from 200 to 400 and the empirical detection powers along with FDRs are recorded for a range of target FDR thresholds. The codes to replicate the analysis can be found in `Codes/Parametric Simulations.R`.
 
 
 ### Real data analyses
